@@ -39,6 +39,11 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const API = SUPABASE_URL + "/rest/v1/pendientes";
 const API_METAS = SUPABASE_URL + "/rest/v1/metas";
 
+// Sube este número cada vez que subas un cambio nuevo del archivo a GitHub.
+// Así, cualquiera que tenga la app abierta con una versión vieja en caché
+// se actualiza solo, sin tener que limpiar caché ni escribir ?v= a mano.
+const APP_VERSION = "1";
+
 function xhr(method, url, body) {
   return new Promise((resolve, reject) => {
     const r = new XMLHttpRequest();
@@ -770,6 +775,22 @@ function iniciarApp() {
     });
 }
 
+// ── Auto-actualización: evita que quede pegada una versión vieja en caché ──
+function revisarVersionNueva() {
+  try {
+    fetch(location.pathname + "?_chk=" + Date.now(), { cache: "no-store" })
+      .then(r => r.text())
+      .then(html => {
+        const m = html.match(/APP_VERSION\s*=\s*"([^"]+)"/);
+        if (m && m[1] && m[1] !== APP_VERSION) {
+          location.href = location.pathname + "?v=" + Date.now();
+        }
+      })
+      .catch(() => {});
+  } catch(e) {}
+}
+
+revisarVersionNueva();
 iniciarApp();
 
 </script>
