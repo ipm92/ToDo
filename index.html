@@ -112,10 +112,11 @@ function formVacio() { return { texto:"", categoria:"release" }; }
 
 // ── Estado ─────────────────────────────────────────────────────────────
 const S = {
-  tab: "maestra",
+  tab: "semana",
   tasks: [],
   metas: [],
   metaFormCat: null,
+  maestraAbiertas: {},
   mostrarForm: false,
   form: formVacio(),
   eliminarId: null,
@@ -191,27 +192,47 @@ function filaSemana(t, i, total, isDone, bg) {
         <button onclick="accionEliminar(${t.id})" style="font-size:11px;font-weight:600;color:#D94F3D;background:#D94F3D14;border-radius:6px;padding:4px 9px;">Eliminar</button>
         <button onclick="S.eliminarId=null;render()" style="font-size:11px;color:#999;background:#F0EDE8;border-radius:6px;padding:4px 9px;">Cancelar</button>
       </div>` : `
-      <button onclick="volverAMaestra(${t.id})" title="Volver a la lista maestra" style="font-size:15px;color:#ccc;flex-shrink:0;line-height:1;">←</button>
+      <button onclick="volverAMaestra(${t.id})" title="Volver al Inbox" style="font-size:15px;color:#ccc;flex-shrink:0;line-height:1;">←</button>
       <button onclick="S.eliminarId=${t.id};render()" style="font-size:16px;color:#ddd;flex-shrink:0;line-height:1;">×</button>
       ${!isDone ? `<div class="drag-handle" onpointerdown="iniciarDrag(event,${t.id})" style="touch-action:none;cursor:grab;color:#ccc;font-size:17px;padding:4px 2px;flex-shrink:0;line-height:1;">≡</div>` : ''}
     `}
   </div>`;
 }
 
-function renderMaestra() {
-  const pend = S.tasks.filter(t=>t.estado==='maestra');
+function toggleCategoriaInbox(catId) {
+  S.maestraAbiertas[catId] = !S.maestraAbiertas[catId];
+  render();
+}
+
+function renderCategoriaInbox(cat) {
+  const pend = S.tasks.filter(t=>t.estado==='maestra' && t.categoria===cat.id);
   const activos = pend.filter(t=>!t.completado);
   const hechos  = pend.filter(t=>t.completado);
+  const abierta = !!S.maestraAbiertas[cat.id];
   return `
-  <div style="margin-top:24px;">
-    <p style="${LBL}">Lista maestra · ${activos.length}</p>
-    <div style="display:flex;flex-direction:column;gap:1px;">
-      ${activos.length===0 ? emptyZoneHTML('Sin pendientes en la lista maestra') : activos.map((t,i)=>filaMaestra(t,i,activos.length,false)).join('')}
+  <div style="margin-bottom:10px;">
+    <button onclick="toggleCategoriaInbox('${cat.id}')" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #E8E6E1;border-radius:12px;padding:14px 16px;">
+      <span style="font-size:14px;font-weight:700;color:${cat.color};letter-spacing:.3px;text-transform:uppercase;">${cat.label}</span>
+      <span style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:12px;font-weight:600;color:#bbb;">${activos.length}</span>
+        <span style="font-size:14px;color:#ccc;display:inline-block;transform:rotate(${abierta?90:0}deg);transition:transform .15s;">›</span>
+      </span>
+    </button>
+    ${abierta ? `
+    <div class="fade" style="margin-top:6px;display:flex;flex-direction:column;gap:1px;">
+      ${activos.length===0 ? emptyZoneHTML('Sin pendientes en ' + cat.label) : activos.map((t,i)=>filaMaestra(t,i,activos.length,false)).join('')}
     </div>
     ${hechos.length>0 ? `
-    <div style="margin-top:8px;display:flex;flex-direction:column;gap:1px;">
+    <div style="margin-top:6px;display:flex;flex-direction:column;gap:1px;">
       ${hechos.map((t,i)=>filaMaestra(t,i,hechos.length,true)).join('')}
-    </div>` : ''}
+    </div>` : ''}` : ''}
+  </div>`;
+}
+
+function renderMaestra() {
+  return `
+  <div style="margin-top:24px;">
+    ${CATEGORIAS.map(cat=>renderCategoriaInbox(cat)).join('')}
   </div>`;
 }
 
@@ -223,7 +244,7 @@ function renderTodosSemana() {
   <div style="margin-top:30px;">
     <p style="${LBL}">To dos de la semana · ${activos.length}</p>
     <div data-zone="bandeja" style="display:flex;flex-direction:column;gap:1px;min-height:50px;">
-      ${activos.length===0 ? emptyZoneHTML('Usa "→ Semana" desde la lista maestra para traer pendientes aquí') : activos.map((t,i)=>filaSemana(t,i,activos.length,false)).join('')}
+      ${activos.length===0 ? emptyZoneHTML('Usa "→ Semana" desde el Inbox para traer pendientes aquí') : activos.map((t,i)=>filaSemana(t,i,activos.length,false)).join('')}
     </div>
     ${hechos.length>0 ? `
     <div style="margin-top:8px;display:flex;flex-direction:column;gap:1px;">
@@ -246,7 +267,7 @@ function renderMeta(m, cat) {
   const todos = S.tasks.filter(t=>t.meta_id===m.id);
   const total = todos.length;
   const hechos = todos.filter(t=>t.completado).length;
-  const completa = total>0 && hechos===total;
+  const completa = !!m.completado;
   if (S.editandoMetaId === m.id) {
     return `
     <div style="background:#fff;border:1.5px solid #1a1a1a;border-radius:14px;padding:14px 16px;margin-bottom:8px;display:flex;gap:8px;align-items:center;">
@@ -260,7 +281,7 @@ function renderMeta(m, cat) {
   return `
   <div data-zone="meta" data-meta="${m.id}" style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;border:1px solid #E8E6E1;">
     <div style="display:flex;align-items:flex-start;gap:10px;">
-      <div style="width:20px;height:20px;border-radius:6px;border:1.5px solid ${completa?cat.color:'#E0DDD7'};background:${completa?cat.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;margin-top:1px;">${completa?'✓':''}</div>
+      <button onclick="toggleMetaCompletado(${m.id})" style="width:20px;height:20px;border-radius:6px;border:1.5px solid ${completa?cat.color:'#E0DDD7'};background:${completa?cat.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;margin-top:1px;">${completa?'✓':''}</button>
       <div style="flex:1;min-width:0;" onclick="editarMeta(${m.id})">
         <p style="font-size:14.5px;font-weight:600;color:${completa?'#aaa':'#1a1a1a'};${completa?'text-decoration:line-through;':''}cursor:pointer;">${esc(m.texto)}</p>
         ${total>0?`<p style="font-size:11px;color:#bbb;margin-top:2px;">${hechos}/${total} listo${total===1?'':'s'}</p>`:''}
@@ -284,10 +305,13 @@ function renderEnfoque(cat) {
   return `
   <div style="margin-bottom:22px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <span style="font-size:13px;font-weight:700;color:${cat.color};">${cat.label}</span>
+      <span style="font-size:13px;font-weight:700;color:${cat.color};letter-spacing:.3px;text-transform:uppercase;">${cat.label}</span>
       <button onclick="toggleMetaForm('${cat.id}')" style="font-size:12px;font-weight:600;color:#777;background:#fff;border:1.5px solid #E8E6E1;border-radius:20px;padding:5px 12px;">+ Meta</button>
     </div>
     ${S.metaFormCat===cat.id ? renderMetaForm(cat) : ''}
+    <div data-zone="nueva-meta" data-categoria="${cat.id}" style="border:1.5px dashed #E8E6E1;border-radius:12px;padding:9px;margin-bottom:8px;text-align:center;">
+      <p style="font-size:11px;color:#ccc;">Suelta aquí un to do para convertirlo en meta</p>
+    </div>
     ${metas.length===0 ? `<p style="font-size:12px;color:#ccc;padding:2px 0 0;">Sin metas todavía</p>` : metas.map(m=>renderMeta(m,cat)).join('')}
   </div>`;
 }
@@ -371,7 +395,7 @@ function renderConfirmSemana() {
 
       <div onclick="S.opcionPasarMaestra=!S.opcionPasarMaestra;render()" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px;border-radius:10px;margin-bottom:8px;background:${S.opcionPasarMaestra?'#1a1a1a0A':'#F7F6F3'};">
         <div style="width:18px;height:18px;border-radius:5px;border:1.5px solid ${S.opcionPasarMaestra?'#1a1a1a':'#E0DDD7'};background:${S.opcionPasarMaestra?'#1a1a1a':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;margin-top:1px;">${S.opcionPasarMaestra?'✓':''}</div>
-        <p style="font-size:13.5px;color:#444;line-height:1.4;">Pasar los pendientes sin terminar de la semana a la lista maestra</p>
+        <p style="font-size:13.5px;color:#444;line-height:1.4;">Pasar los pendientes sin terminar de la semana al Inbox</p>
       </div>
 
       <div onclick="S.opcionBorrarMetas=!S.opcionBorrarMetas;render()" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px;border-radius:10px;margin-bottom:18px;background:${S.opcionBorrarMetas?'#D94F3D0A':'#F7F6F3'};">
@@ -399,8 +423,8 @@ function render() {
           </button>
         </div>
         <div style="display:flex;gap:6px;margin-top:14px;">
-          <button onclick="S.tab='maestra';render()" style="padding:7px 18px;border-radius:20px;font-size:13px;font-weight:500;background:${S.tab==='maestra'?'#1a1a1a':'transparent'};color:${S.tab==='maestra'?'#fff':'#999'};border:1.5px solid ${S.tab==='maestra'?'#1a1a1a':'#E8E6E1'};">Lista maestra</button>
           <button onclick="S.tab='semana';render()" style="padding:7px 18px;border-radius:20px;font-size:13px;font-weight:500;background:${S.tab==='semana'?'#1a1a1a':'transparent'};color:${S.tab==='semana'?'#fff':'#999'};border:1.5px solid ${S.tab==='semana'?'#1a1a1a':'#E8E6E1'};">Esta semana</button>
+          <button onclick="S.tab='maestra';render()" style="padding:7px 18px;border-radius:20px;font-size:13px;font-weight:500;background:${S.tab==='maestra'?'#1a1a1a':'transparent'};color:${S.tab==='maestra'?'#fff':'#999'};border:1.5px solid ${S.tab==='maestra'?'#1a1a1a':'#E8E6E1'};">Inbox</button>
         </div>
       </div>
     </div>
@@ -446,6 +470,26 @@ async function accionGuardar() {
   }
 }
 
+async function recalcMeta(metaId) {
+  if (!metaId) return;
+  const todos = S.tasks.filter(t=>t.meta_id===metaId);
+  const listo = todos.length>0 && todos.every(t=>t.completado);
+  const m = S.metas.find(x=>x.id===metaId);
+  if (!m || !!m.completado === listo) return;
+  S.metas = S.metas.map(x=>x.id===metaId?{...x, completado:listo}:x);
+  render();
+  try { await dbActualizarMeta(metaId, {completado:listo}); } catch(e) { /* silencioso */ }
+}
+
+async function toggleMetaCompletado(id) {
+  const m = S.metas.find(x=>x.id===id);
+  if (!m) return;
+  const nuevo = !m.completado;
+  S.metas = S.metas.map(x=>x.id===id?{...x,completado:nuevo}:x);
+  render();
+  try { await dbActualizarMeta(id, {completado:nuevo}); } catch(e) { alert("Error: " + e.message); }
+}
+
 async function toggleCompletado(id) {
   const t = S.tasks.find(x=>x.id===id);
   if (!t) return;
@@ -453,14 +497,18 @@ async function toggleCompletado(id) {
   S.tasks = S.tasks.map(x=>x.id===id?{...x,completado:nuevo}:x);
   render();
   try { await dbActualizar(id, {completado:nuevo}); } catch(e) { alert("Error: " + e.message); }
+  if (t.meta_id) recalcMeta(t.meta_id);
 }
 
 async function accionEliminar(id) {
+  const t = S.tasks.find(x=>x.id===id);
+  const metaIdAnterior = t ? t.meta_id : null;
   try {
     await dbEliminar(id);
     S.tasks = S.tasks.filter(t=>t.id!==id);
     S.eliminarId = null;
     render();
+    if (metaIdAnterior) recalcMeta(metaIdAnterior);
   } catch(e) { alert("Error al eliminar: " + e.message); }
 }
 
@@ -472,15 +520,19 @@ async function enviarASemana(id) {
 }
 
 async function volverAMaestra(id) {
+  const t = S.tasks.find(x=>x.id===id);
+  const metaIdAnterior = t ? t.meta_id : null;
   const obj = { estado:"maestra", dia:null, meta_id:null };
   S.tasks = S.tasks.map(x=>x.id===id?{...x,...obj}:x);
   render();
   try { await dbActualizar(id, obj); } catch(e) { alert("Error: " + e.message); }
+  if (metaIdAnterior) recalcMeta(metaIdAnterior);
 }
 
 async function moverTask(id, zona, extra) {
   const t = S.tasks.find(x=>x.id===id);
   if (!t) return;
+  const metaIdAnterior = t.meta_id || null;
   let obj;
   if (zona === "bandeja") obj = { estado:"semana", dia:null, meta_id:null };
   else if (zona === "dia") obj = { estado:"semana", dia:extra, meta_id:null };
@@ -490,6 +542,8 @@ async function moverTask(id, zona, extra) {
   S.tasks = S.tasks.map(x=>x.id===id?{...x,...obj}:x);
   render();
   try { await dbActualizar(id, obj); } catch(e) { alert("Error al mover: " + e.message); }
+  if (metaIdAnterior) recalcMeta(metaIdAnterior);
+  if (obj.meta_id) recalcMeta(obj.meta_id);
 }
 
 async function ejecutarPlanearSemana() {
@@ -548,13 +602,27 @@ async function guardarMeta(catId) {
 }
 
 async function eliminarMeta(id) {
-  if (!confirm("¿Eliminar esta meta? Sus to dos volverán a 'Por asignar'.")) return;
+  if (!confirm("¿Eliminar esta meta? Sus to dos volverán a 'To dos de la semana'.")) return;
   try {
     await dbEliminarMeta(id);
     S.metas = S.metas.filter(m=>m.id!==id);
     S.tasks = S.tasks.map(t=> t.meta_id===id ? {...t, meta_id:null} : t);
     render();
   } catch(e) { alert("Error: " + e.message); }
+}
+
+async function convertirEnMeta(id, catId) {
+  const t = S.tasks.find(x=>x.id===id);
+  if (!t) return;
+  const metaIdAnterior = t.meta_id || null;
+  try {
+    const nuevaMeta = await dbGuardarMeta({ categoria: catId, texto: t.texto, completado: false });
+    await dbEliminar(id);
+    if (nuevaMeta) S.metas.push(nuevaMeta);
+    S.tasks = S.tasks.filter(x=>x.id!==id);
+    render();
+    if (metaIdAnterior) recalcMeta(metaIdAnterior);
+  } catch(e) { alert("Error al convertir en meta: " + e.message); }
 }
 
 async function guardarMetaTodo(metaId) {
@@ -568,6 +636,7 @@ async function guardarMetaTodo(metaId) {
     if (guardado) S.tasks.push(guardado);
     render();
     setTimeout(() => { const i = document.getElementById("inp-todo-" + metaId); if(i) i.focus(); }, 100);
+    recalcMeta(metaId);
   } catch(e) { alert("Error al guardar to do: " + e.message); }
 }
 
@@ -667,6 +736,7 @@ function soltarDrag(e) {
     if (zona === "dia") moverTask(id, "dia", zoneEl.dataset.dia);
     else if (zona === "meta") moverTask(id, "meta", zoneEl.dataset.meta);
     else if (zona === "bandeja") moverTask(id, "bandeja", null);
+    else if (zona === "nueva-meta") convertirEnMeta(id, zoneEl.dataset.categoria);
   }
 }
 
