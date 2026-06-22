@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Pendientes" />
+  <meta name="apple-mobile-web-app-title" content="Planeación" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <title>Mis Pendientes</title>
+  <title>Planeación</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -74,6 +74,31 @@ async function dbEliminar(id) {
   await xhr("DELETE", API + "?id=eq." + id + "&apikey=" + SUPABASE_KEY);
 }
 
+const API_METAS = SUPABASE_URL + "/rest/v1/metas";
+const API_METAS_TODOS = SUPABASE_URL + "/rest/v1/metas_todos";
+
+async function dbCargarMetas() {
+  return await xhr("GET", API_METAS + "?select=*,todos:metas_todos(*)&todos.order=created_at.asc&order=created_at.asc&apikey=" + SUPABASE_KEY);
+}
+async function dbGuardarMeta(obj) {
+  const res = await xhr("POST", API_METAS + "?apikey=" + SUPABASE_KEY, obj);
+  return Array.isArray(res) ? res[0] : res;
+}
+async function dbEliminarMeta(id) {
+  await xhr("DELETE", API_METAS + "?id=eq." + id + "&apikey=" + SUPABASE_KEY);
+}
+async function dbGuardarMetaTodo(obj) {
+  const res = await xhr("POST", API_METAS_TODOS + "?apikey=" + SUPABASE_KEY, obj);
+  return Array.isArray(res) ? res[0] : res;
+}
+async function dbActualizarMetaTodo(id, obj) {
+  const res = await xhr("PATCH", API_METAS_TODOS + "?id=eq." + id + "&apikey=" + SUPABASE_KEY, obj);
+  return Array.isArray(res) ? res[0] : res;
+}
+async function dbEliminarMetaTodo(id) {
+  await xhr("DELETE", API_METAS_TODOS + "?id=eq." + id + "&apikey=" + SUPABASE_KEY);
+}
+
 // ── Datos ──────────────────────────────────────────────────────────────
 const CATEGORIAS = [
   { id:"release",    label:"Release",   color:"#EF6C04" },
@@ -90,6 +115,67 @@ const DIAS = [
   { id:"viernes",   label:"Viernes" },
 ];
 
+// ── Importación única desde la libreta ───────────────────────────────
+const IMPORT_KEY = "pendientes_import_libreta_1";
+const IMPORT_ITEMS = [
+  { texto:"Cardolán calle anticuarios", categoria:"cardolan" },
+  { texto:"Cardolán álbumes colores", categoria:"cardolan" },
+  { texto:"Carmen - Shopify", categoria:"cardolan" },
+  { texto:"Carmen - photoshoot", categoria:"cardolan" },
+
+  { texto:"Botellón Release", categoria:"release" },
+  { texto:"Release averiguar audífonos", categoria:"release" },
+  { texto:"Release captions", categoria:"release" },
+  { texto:"Release video rojo y azul", categoria:"release" },
+  { texto:"Grabación Release con Majo", categoria:"release" },
+  { texto:"Ver una de las clases grabadas Rush", categoria:"release" },
+  { texto:"Propuesta Fer", categoria:"release" },
+  { texto:"Botellón siembra", categoria:"release" },
+  { texto:"Botellón AUA", categoria:"release" },
+  { texto:"Oda pendientes", categoria:"release" },
+
+  { texto:"Hablar con Flor, Grille y PJ días matri", categoria:"matrimonio" },
+  { texto:"Nelfy hotel proveedores", categoria:"matrimonio" },
+  { texto:"M. Cristina hotel o cabaña Adriana", categoria:"matrimonio" },
+  { texto:"Zapatos Clau - Jorge Duque", categoria:"matrimonio" },
+  { texto:"Malva Lore", categoria:"matrimonio" },
+
+  { texto:"Programar citología y ecografía", categoria:"gestion" },
+  { texto:"Vender celular", categoria:"gestion" },
+  { texto:"Lentes derechos", categoria:"gestion" },
+  { texto:"Seguro Bolívar - cobro cta ahorros #923 (opción 3, opción 1)", categoria:"gestion" },
+  { texto:"Mandar fotos a swaperbc@gmail.com", categoria:"gestion" },
+  { texto:"Tomar fotos Bettinas closet", categoria:"gestion" },
+  { texto:"Alborada matri", categoria:"gestion" },
+  { texto:"Muchi opina cómo va la oficina", categoria:"gestion" },
+  { texto:"Shower Julio y Laura", categoria:"gestion" },
+  { texto:"Cita pupila dilatada Aparicio", categoria:"gestion" },
+  { texto:"Aparicio siguiente cita", categoria:"gestion" },
+  { texto:"Luchito", categoria:"gestion" },
+  { texto:"Luis Mi", categoria:"gestion" },
+  { texto:"Jaime Wills", categoria:"gestion" },
+  { texto:"JPC", categoria:"gestion" },
+  { texto:"Carlo top", categoria:"gestion" },
+  { texto:"Encuesta celebrity", categoria:"gestion" },
+  { texto:"Album 40 años paseo Helda y Santiago", categoria:"gestion" },
+  { texto:"Exámenes Ángela", categoria:"gestion" },
+  { texto:"Nico manual", categoria:"gestion" },
+];
+
+async function importarLista() {
+  if (!confirm("Vas a importar " + IMPORT_ITEMS.length + " pendientes a la lista maestra. ¿Continuar?")) return;
+  const btn = document.getElementById("btn-importar");
+  if (btn) { btn.innerText = "Importando..."; btn.disabled = true; }
+  for (const item of IMPORT_ITEMS) {
+    try {
+      const guardado = await dbGuardar({ texto:item.texto, categoria:item.categoria, estado:"maestra", dia:null, completado:false });
+      if (guardado) S.tasks.push(guardado);
+    } catch(e) { console.error("Error importando:", item.texto, e); }
+  }
+  localStorage.setItem(IMPORT_KEY, "1");
+  render();
+}
+
 function getCategoria(id) { return CATEGORIAS.find(c=>c.id===id) || CATEGORIAS[0]; }
 function diaLabel(id) { const d = DIAS.find(x=>x.id===id); return d ? d.label : ""; }
 function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
@@ -98,6 +184,8 @@ function formVacio() { return { texto:"", categoria:"release" }; }
 // ── Estado ─────────────────────────────────────────────────────────────
 const S = {
   tasks: [],
+  metas: [],
+  metaFormCat: null,
   mostrarForm: false,
   form: formVacio(),
   eliminarId: null,
@@ -155,6 +243,69 @@ function renderMaestra() {
   </div>`;
 }
 
+function renderMetaForm(cat) {
+  return `
+  <div class="fade" style="background:#fff;border:1px solid #E8E6E1;border-radius:12px;padding:12px;margin-bottom:8px;display:flex;gap:8px;">
+    <input id="inp-meta-${cat.id}" type="text" placeholder="Nueva meta de ${cat.label}"
+      style="flex:1;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:9px 12px;font-size:13.5px;color:#1a1a1a;"
+      onkeydown="if(event.key==='Enter') guardarMeta('${cat.id}')" />
+    <button onclick="guardarMeta('${cat.id}')" style="font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:8px;padding:9px 14px;flex-shrink:0;">Listo</button>
+  </div>`;
+}
+
+function renderMeta(m, cat) {
+  const todos = m.todos || [];
+  const total = todos.length;
+  const hechos = todos.filter(t=>t.completado).length;
+  const completa = total>0 && hechos===total;
+  return `
+  <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;border:1px solid #E8E6E1;">
+    <div style="display:flex;align-items:flex-start;gap:10px;">
+      <div style="width:20px;height:20px;border-radius:6px;border:1.5px solid ${completa?cat.color:'#E0DDD7'};background:${completa?cat.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;margin-top:1px;">${completa?'✓':''}</div>
+      <div style="flex:1;min-width:0;">
+        <p style="font-size:14.5px;font-weight:600;color:${completa?'#aaa':'#1a1a1a'};${completa?'text-decoration:line-through;':''}">${esc(m.texto)}</p>
+        ${total>0?`<p style="font-size:11px;color:#bbb;margin-top:2px;">${hechos}/${total} listo${total===1?'':'s'}</p>`:''}
+      </div>
+      <button onclick="eliminarMeta(${m.id})" style="font-size:15px;color:#ddd;flex-shrink:0;line-height:1;">×</button>
+    </div>
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:7px;padding-left:30px;">
+      ${todos.map(t=>`
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button onclick="toggleMetaTodo(${t.id})" style="width:18px;height:18px;border-radius:50%;border:1.5px solid ${t.completado?cat.color:'#E0DDD7'};background:${t.completado?cat.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;">${t.completado?'✓':''}</button>
+          <p style="font-size:13.5px;color:${t.completado?'#bbb':'#444'};${t.completado?'text-decoration:line-through;':''}flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;">${esc(t.texto)}</p>
+          <button onclick="eliminarMetaTodo(${t.id},${m.id})" style="font-size:14px;color:#ddd;flex-shrink:0;">×</button>
+        </div>`).join('')}
+      <div style="display:flex;gap:6px;margin-top:2px;">
+        <input id="inp-todo-${m.id}" type="text" placeholder="Agregar to do..."
+          style="flex:1;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:7px 10px;font-size:13px;color:#1a1a1a;"
+          onkeydown="if(event.key==='Enter') guardarMetaTodo(${m.id})" />
+        <button onclick="guardarMetaTodo(${m.id})" style="font-size:13px;font-weight:600;color:#777;background:#F0EDE8;border-radius:8px;padding:7px 12px;flex-shrink:0;">+</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderEnfoque(cat) {
+  const metas = S.metas.filter(m=>m.categoria===cat.id);
+  return `
+  <div style="margin-bottom:22px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <span style="font-size:13px;font-weight:700;color:${cat.color};">${cat.label}</span>
+      <button onclick="toggleMetaForm('${cat.id}')" style="font-size:12px;font-weight:600;color:#777;background:#fff;border:1.5px solid #E8E6E1;border-radius:20px;padding:5px 12px;">+ Meta</button>
+    </div>
+    ${S.metaFormCat===cat.id ? renderMetaForm(cat) : ''}
+    ${metas.length===0 ? `<p style="font-size:12px;color:#ccc;padding:2px 0 0;">Sin metas todavía</p>` : metas.map(m=>renderMeta(m,cat)).join('')}
+  </div>`;
+}
+
+function renderEnfoques() {
+  return `
+  <div style="margin-top:30px;">
+    <p style="${LBL}">Enfoques de la semana</p>
+    ${CATEGORIAS.map(cat=>renderEnfoque(cat)).join('')}
+  </div>`;
+}
+
 function renderDia(d) {
   const tareas  = S.tasks.filter(t=>t.estado==='semana' && t.dia===d.id);
   const activos = tareas.filter(t=>!t.completado);
@@ -174,7 +325,7 @@ function renderSemana() {
   return `
   <div style="margin-top:30px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <p style="${LBL}margin-bottom:0;">Esta semana</p>
+      <p style="${LBL}margin-bottom:0;">Recordatorios</p>
       <button onclick="S.confirmSemana=true;render()" style="font-size:12px;font-weight:600;color:#777;background:#fff;border:1.5px solid #E8E6E1;border-radius:20px;padding:6px 14px;">Planear nueva semana</button>
     </div>
     ${DIAS.map(d=>renderDia(d)).join('')}
@@ -225,7 +376,7 @@ function render() {
       <div style="max-width:560px;margin:0 auto;">
         <p style="font-size:11px;font-weight:500;color:#bbb;letter-spacing:1px;text-transform:uppercase;">Plan semanal</p>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
-          <h1 style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:#1a1a1a;">Pendientes</h1>
+          <h1 style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:#1a1a1a;">Planeación</h1>
           <button onclick="toggleForm()" style="width:38px;height:38px;border-radius:50%;background:${S.mostrarForm?"#f0ede8":"#1a1a1a"};color:${S.mostrarForm?"#999":"#fff"};font-size:20px;display:flex;align-items:center;justify-content:center;">
             ${S.mostrarForm?"×":"+"}
           </button>
@@ -233,8 +384,14 @@ function render() {
       </div>
     </div>
     <div class="safe-bot" style="max-width:560px;margin:0 auto;padding:0 16px;">
+      ${(!localStorage.getItem(IMPORT_KEY) && IMPORT_ITEMS.length>0) ? `
+      <div class="fade" style="background:#fff;border:1.5px dashed #E8E6E1;border-radius:14px;padding:16px;margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <p style="font-size:13px;color:#777;line-height:1.4;">Tienes ${IMPORT_ITEMS.length} pendientes de tu libreta listos para importar a la lista maestra</p>
+        <button id="btn-importar" onclick="importarLista()" style="font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:20px;padding:8px 16px;flex-shrink:0;white-space:nowrap;">Importar</button>
+      </div>` : ''}
       ${S.mostrarForm ? renderForm() : ''}
       ${renderMaestra()}
+      ${renderEnfoques()}
       ${renderSemana()}
     </div>
   </div>
@@ -324,6 +481,63 @@ async function ejecutarPlanearSemana() {
   }
 }
 
+// ── Acciones: Enfoques / Metas / To dos ─────────────────────────────────
+function toggleMetaForm(catId) {
+  S.metaFormCat = S.metaFormCat === catId ? null : catId;
+  render();
+  if (S.metaFormCat) setTimeout(() => { const i = document.getElementById("inp-meta-" + catId); if(i) i.focus(); }, 100);
+}
+
+async function guardarMeta(catId) {
+  const inp = document.getElementById("inp-meta-" + catId);
+  const texto = inp ? inp.value.trim() : "";
+  if (!texto) return;
+  try {
+    const guardado = await dbGuardarMeta({ categoria: catId, texto });
+    if (guardado) { guardado.todos = []; S.metas.push(guardado); }
+    S.metaFormCat = null;
+    render();
+  } catch(e) { alert("Error al guardar meta: " + e.message); }
+}
+
+async function eliminarMeta(id) {
+  if (!confirm("¿Eliminar esta meta y sus to dos?")) return;
+  try {
+    await dbEliminarMeta(id);
+    S.metas = S.metas.filter(m=>m.id!==id);
+    render();
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+async function guardarMetaTodo(metaId) {
+  const inp = document.getElementById("inp-todo-" + metaId);
+  const texto = inp ? inp.value.trim() : "";
+  if (!texto) return;
+  try {
+    const guardado = await dbGuardarMetaTodo({ meta_id: metaId, texto, completado: false });
+    const m = S.metas.find(x=>x.id===metaId);
+    if (guardado && m) { if (!m.todos) m.todos = []; m.todos.push(guardado); }
+    render();
+    setTimeout(() => { const i = document.getElementById("inp-todo-" + metaId); if(i) i.focus(); }, 100);
+  } catch(e) { alert("Error al guardar to do: " + e.message); }
+}
+
+async function toggleMetaTodo(id) {
+  let nuevo = null;
+  S.metas.forEach(m => { (m.todos||[]).forEach(t => { if (t.id===id) { nuevo = !t.completado; t.completado = nuevo; } }); });
+  render();
+  try { await dbActualizarMetaTodo(id, {completado:nuevo}); } catch(e) { alert("Error: " + e.message); }
+}
+
+async function eliminarMetaTodo(id, metaId) {
+  try {
+    await dbEliminarMetaTodo(id);
+    const m = S.metas.find(x=>x.id===metaId);
+    if (m) m.todos = (m.todos||[]).filter(t=>t.id!==id);
+    render();
+  } catch(e) { alert("Error: " + e.message); }
+}
+
 // ── Drag & drop (pointer events: funciona con mouse y touch) ───────────
 let dragState = null;
 
@@ -388,8 +602,8 @@ function iniciarApp() {
     <div style="min-height:100vh;background:#F7F6F3;display:flex;align-items:center;justify-content:center;">
       <p style="font-size:13px;color:#bbb;font-weight:500;letter-spacing:1px;">Cargando...</p>
     </div>`;
-  dbCargar()
-    .then(data => { S.tasks = data || []; render(); })
+  Promise.all([dbCargar(), dbCargarMetas()])
+    .then(([tasks, metas]) => { S.tasks = tasks || []; S.metas = metas || []; render(); })
     .catch(e => {
       document.getElementById("app").innerHTML = `
         <div style="min-height:100vh;background:#F7F6F3;display:flex;align-items:center;justify-content:center;padding:24px;">
