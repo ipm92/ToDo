@@ -96,6 +96,7 @@ const CATEGORIAS = [
   { id:"social",     label:"Social",    color:"#7BB443" },
   { id:"gestion",    label:"Gestión",   color:"#BFC932" },
   { id:"matrimonio", label:"Matrimonio",color:"#8E24AA" },
+  { id:"yo",         label:"Yo",        color:"#1E88E5" },
 ];
 const DIAS = [
   { id:"lunes",     label:"Lunes" },
@@ -118,6 +119,7 @@ const S = {
   metaFormCat: null,
   maestraAbiertas: {},
   mostrarForm: false,
+  formDestino: "maestra",
   form: formVacio(),
   eliminarId: null,
   editandoId: null,
@@ -240,10 +242,15 @@ function renderTodosSemana() {
   const items = S.tasks.filter(t=>t.estado==='semana' && !t.dia && !t.meta_id);
   const activos = items.filter(t=>!t.completado);
   const hechos  = items.filter(t=>t.completado);
+  const formAbierto = S.mostrarForm && S.formDestino === "semana";
   return `
   <div style="margin-top:30px;">
-    <p style="${LBL}">To dos de la semana · ${activos.length}</p>
-    <div data-zone="bandeja" style="display:flex;flex-direction:column;gap:1px;min-height:50px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <p style="${LBL}margin-bottom:0;">To dos de la semana · ${activos.length}</p>
+      <button onclick="toggleForm('semana')" style="width:28px;height:28px;border-radius:50%;background:${formAbierto?'#f0ede8':'#1a1a1a'};color:${formAbierto?'#999':'#fff'};font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${formAbierto?'×':'+'}</button>
+    </div>
+    ${formAbierto ? renderForm() : ''}
+    <div data-zone="bandeja" style="display:flex;flex-direction:column;gap:1px;min-height:50px;margin-top:${formAbierto?'10px':'0'};">
       ${activos.length===0 ? emptyZoneHTML('Usa "→ Semana" desde el Inbox para traer pendientes aquí') : activos.map((t,i)=>filaSemana(t,i,activos.length,false)).join('')}
     </div>
     ${hechos.length>0 ? `
@@ -418,9 +425,10 @@ function render() {
       <div style="max-width:560px;margin:0 auto;">
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <h1 style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:#1a1a1a;">Planeación</h1>
-          <button onclick="toggleForm()" style="width:38px;height:38px;border-radius:50%;background:${S.mostrarForm?"#f0ede8":"#1a1a1a"};color:${S.mostrarForm?"#999":"#fff"};font-size:20px;display:flex;align-items:center;justify-content:center;">
-            ${S.mostrarForm?"×":"+"}
-          </button>
+          ${S.tab==='maestra' ? `
+          <button onclick="toggleForm('maestra')" style="width:38px;height:38px;border-radius:50%;background:${(S.mostrarForm&&S.formDestino==='maestra')?"#f0ede8":"#1a1a1a"};color:${(S.mostrarForm&&S.formDestino==='maestra')?"#999":"#fff"};font-size:20px;display:flex;align-items:center;justify-content:center;">
+            ${(S.mostrarForm&&S.formDestino==='maestra')?"×":"+"}
+          </button>` : ''}
         </div>
         <div style="display:flex;gap:6px;margin-top:14px;">
           <button onclick="S.tab='semana';render()" style="padding:7px 18px;border-radius:20px;font-size:13px;font-weight:500;background:${S.tab==='semana'?'#1a1a1a':'transparent'};color:${S.tab==='semana'?'#fff':'#999'};border:1.5px solid ${S.tab==='semana'?'#1a1a1a':'#E8E6E1'};">Esta semana</button>
@@ -429,7 +437,7 @@ function render() {
       </div>
     </div>
     <div class="safe-bot" style="max-width:560px;margin:0 auto;padding:0 16px;">
-      ${S.mostrarForm ? renderForm() : ''}
+      ${(S.mostrarForm && S.formDestino==='maestra') ? renderForm() : ''}
       ${S.tab==='maestra' ? renderMaestra() : renderSemanaTab()}
     </div>
   </div>
@@ -437,9 +445,15 @@ function render() {
 }
 
 // ── Acciones ────────────────────────────────────────────────────────────
-function toggleForm() {
-  S.mostrarForm = !S.mostrarForm;
-  if (S.mostrarForm) S.form = formVacio();
+function toggleForm(destino) {
+  destino = destino || "maestra";
+  if (S.mostrarForm && S.formDestino === destino) {
+    S.mostrarForm = false;
+  } else {
+    S.mostrarForm = true;
+    S.formDestino = destino;
+    S.form = formVacio();
+  }
   render();
   if (S.mostrarForm) setTimeout(() => { const i = document.getElementById("f-texto"); if(i) i.focus(); }, 150);
 }
@@ -457,7 +471,8 @@ async function accionGuardar() {
   if (!texto) { alert("Escribe el pendiente"); return; }
   const btn = document.getElementById("btn-agregar");
   if (btn) { btn.innerText = "Guardando..."; btn.style.opacity = ".6"; btn.disabled = true; }
-  const obj = { texto, categoria: S.form.categoria, estado: "maestra", dia: null, meta_id: null, completado: false };
+  const destino = S.formDestino === "semana" ? "semana" : "maestra";
+  const obj = { texto, categoria: S.form.categoria, estado: destino, dia: null, meta_id: null, completado: false };
   try {
     const guardado = await dbGuardar(obj);
     if (guardado) S.tasks.push(guardado);
