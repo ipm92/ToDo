@@ -37,6 +37,7 @@
 const SUPABASE_URL = "https://xguzppefwanjvonlpwxs.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhndXpwcGVmd2FuanZvbmxwd3hzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyMzQ0NTMsImV4cCI6MjA5NDgxMDQ1M30.Q1v3wlDLgwaoOQ767VoQwoFCl3lAWbCowylh1cQ5lG8";
 const API = SUPABASE_URL + "/rest/v1/pendientes";
+const API_METAS = SUPABASE_URL + "/rest/v1/metas";
 
 function xhr(method, url, body) {
   return new Promise((resolve, reject) => {
@@ -73,12 +74,8 @@ async function dbActualizar(id, obj) {
 async function dbEliminar(id) {
   await xhr("DELETE", API + "?id=eq." + id + "&apikey=" + SUPABASE_KEY);
 }
-
-const API_METAS = SUPABASE_URL + "/rest/v1/metas";
-const API_METAS_TODOS = SUPABASE_URL + "/rest/v1/metas_todos";
-
 async function dbCargarMetas() {
-  return await xhr("GET", API_METAS + "?select=*,todos:metas_todos(*)&todos.order=created_at.asc&order=created_at.asc&apikey=" + SUPABASE_KEY);
+  return await xhr("GET", API_METAS + "?order=created_at.asc&apikey=" + SUPABASE_KEY);
 }
 async function dbGuardarMeta(obj) {
   const res = await xhr("POST", API_METAS + "?apikey=" + SUPABASE_KEY, obj);
@@ -87,16 +84,9 @@ async function dbGuardarMeta(obj) {
 async function dbEliminarMeta(id) {
   await xhr("DELETE", API_METAS + "?id=eq." + id + "&apikey=" + SUPABASE_KEY);
 }
-async function dbGuardarMetaTodo(obj) {
-  const res = await xhr("POST", API_METAS_TODOS + "?apikey=" + SUPABASE_KEY, obj);
+async function dbActualizarMeta(id, obj) {
+  const res = await xhr("PATCH", API_METAS + "?id=eq." + id + "&apikey=" + SUPABASE_KEY, obj);
   return Array.isArray(res) ? res[0] : res;
-}
-async function dbActualizarMetaTodo(id, obj) {
-  const res = await xhr("PATCH", API_METAS_TODOS + "?id=eq." + id + "&apikey=" + SUPABASE_KEY, obj);
-  return Array.isArray(res) ? res[0] : res;
-}
-async function dbEliminarMetaTodo(id) {
-  await xhr("DELETE", API_METAS_TODOS + "?id=eq." + id + "&apikey=" + SUPABASE_KEY);
 }
 
 // ── Datos ──────────────────────────────────────────────────────────────
@@ -115,67 +105,6 @@ const DIAS = [
   { id:"viernes",   label:"Viernes" },
 ];
 
-// ── Importación única desde la libreta ───────────────────────────────
-const IMPORT_KEY = "pendientes_import_libreta_1";
-const IMPORT_ITEMS = [
-  { texto:"Cardolán calle anticuarios", categoria:"cardolan" },
-  { texto:"Cardolán álbumes colores", categoria:"cardolan" },
-  { texto:"Carmen - Shopify", categoria:"cardolan" },
-  { texto:"Carmen - photoshoot", categoria:"cardolan" },
-
-  { texto:"Botellón Release", categoria:"release" },
-  { texto:"Release averiguar audífonos", categoria:"release" },
-  { texto:"Release captions", categoria:"release" },
-  { texto:"Release video rojo y azul", categoria:"release" },
-  { texto:"Grabación Release con Majo", categoria:"release" },
-  { texto:"Ver una de las clases grabadas Rush", categoria:"release" },
-  { texto:"Propuesta Fer", categoria:"release" },
-  { texto:"Botellón siembra", categoria:"release" },
-  { texto:"Botellón AUA", categoria:"release" },
-  { texto:"Oda pendientes", categoria:"release" },
-
-  { texto:"Hablar con Flor, Grille y PJ días matri", categoria:"matrimonio" },
-  { texto:"Nelfy hotel proveedores", categoria:"matrimonio" },
-  { texto:"M. Cristina hotel o cabaña Adriana", categoria:"matrimonio" },
-  { texto:"Zapatos Clau - Jorge Duque", categoria:"matrimonio" },
-  { texto:"Malva Lore", categoria:"matrimonio" },
-
-  { texto:"Programar citología y ecografía", categoria:"gestion" },
-  { texto:"Vender celular", categoria:"gestion" },
-  { texto:"Lentes derechos", categoria:"gestion" },
-  { texto:"Seguro Bolívar - cobro cta ahorros #923 (opción 3, opción 1)", categoria:"gestion" },
-  { texto:"Mandar fotos a swaperbc@gmail.com", categoria:"gestion" },
-  { texto:"Tomar fotos Bettinas closet", categoria:"gestion" },
-  { texto:"Alborada matri", categoria:"gestion" },
-  { texto:"Muchi opina cómo va la oficina", categoria:"gestion" },
-  { texto:"Shower Julio y Laura", categoria:"gestion" },
-  { texto:"Cita pupila dilatada Aparicio", categoria:"gestion" },
-  { texto:"Aparicio siguiente cita", categoria:"gestion" },
-  { texto:"Luchito", categoria:"gestion" },
-  { texto:"Luis Mi", categoria:"gestion" },
-  { texto:"Jaime Wills", categoria:"gestion" },
-  { texto:"JPC", categoria:"gestion" },
-  { texto:"Carlo top", categoria:"gestion" },
-  { texto:"Encuesta celebrity", categoria:"gestion" },
-  { texto:"Album 40 años paseo Helda y Santiago", categoria:"gestion" },
-  { texto:"Exámenes Ángela", categoria:"gestion" },
-  { texto:"Nico manual", categoria:"gestion" },
-];
-
-async function importarLista() {
-  if (!confirm("Vas a importar " + IMPORT_ITEMS.length + " pendientes a la lista maestra. ¿Continuar?")) return;
-  const btn = document.getElementById("btn-importar");
-  if (btn) { btn.innerText = "Importando..."; btn.disabled = true; }
-  for (const item of IMPORT_ITEMS) {
-    try {
-      const guardado = await dbGuardar({ texto:item.texto, categoria:item.categoria, estado:"maestra", dia:null, completado:false });
-      if (guardado) S.tasks.push(guardado);
-    } catch(e) { console.error("Error importando:", item.texto, e); }
-  }
-  localStorage.setItem(IMPORT_KEY, "1");
-  render();
-}
-
 function getCategoria(id) { return CATEGORIAS.find(c=>c.id===id) || CATEGORIAS[0]; }
 function diaLabel(id) { const d = DIAS.find(x=>x.id===id); return d ? d.label : ""; }
 function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
@@ -183,36 +112,78 @@ function formVacio() { return { texto:"", categoria:"release" }; }
 
 // ── Estado ─────────────────────────────────────────────────────────────
 const S = {
+  tab: "maestra",
   tasks: [],
   metas: [],
   metaFormCat: null,
   mostrarForm: false,
   form: formVacio(),
   eliminarId: null,
+  editandoId: null,
+  editandoMetaId: null,
   confirmSemana: false,
+  opcionPasarMaestra: true,
+  opcionBorrarMetas: false,
 };
 
 const LBL = `font-size:11px;font-weight:500;color:#999;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px;display:block;`;
 const INP = `width:100%;background:#fff;border:1.5px solid #E8E6E1;border-radius:10px;padding:11px 14px;color:#1a1a1a;font-size:15px;transition:border-color .15s;`;
 
-// ── Render ──────────────────────────────────────────────────────────────
+// ── Render: piezas compartidas ──────────────────────────────────────────
 function emptyZoneHTML(msg) {
   return `<div style="background:#fff;border:1.5px dashed #E8E6E1;border-radius:12px;padding:18px;text-align:center;"><p style="font-size:12px;color:#ccc;">${msg}</p></div>`;
 }
 
-function taskRowHTML(t, i, total, isDone) {
+function filaEditInput(t) {
+  return `
+  <div style="background:#fff;border:1.5px solid #1a1a1a;border-radius:12px;padding:10px 12px;display:flex;gap:8px;align-items:center;">
+    <input id="edit-texto-${t.id}" type="text" value="${esc(t.texto)}"
+      style="flex:1;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:9px 12px;font-size:14px;color:#1a1a1a;"
+      onkeydown="if(event.key==='Enter') guardarEdicionTexto(${t.id}); if(event.key==='Escape') cancelarEdicionTexto();" />
+    <button onclick="guardarEdicionTexto(${t.id})" style="font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:8px;padding:9px 12px;flex-shrink:0;">✓</button>
+    <button onclick="cancelarEdicionTexto()" style="font-size:15px;color:#999;background:#F0EDE8;border-radius:8px;padding:9px 12px;flex-shrink:0;line-height:1;">×</button>
+  </div>`;
+}
+
+function filaMaestra(t, i, total, isDone) {
+  if (S.editandoId === t.id) return filaEditInput(t);
   const cat = getCategoria(t.categoria);
   const isFirst = i===0, isLast = i===total-1;
   const rad = isFirst&&isLast ? "12px" : isFirst ? "12px 12px 4px 4px" : isLast ? "4px 4px 12px 12px" : "4px";
   return `
-  <div class="task-row" data-id="${t.id}" style="background:#fff;border-radius:${rad};padding:13px 14px;display:flex;align-items:center;gap:11px;opacity:${isDone?0.55:1};">
+  <div style="background:#fff;border-radius:${rad};padding:13px 14px;display:flex;align-items:center;gap:11px;opacity:${isDone?0.55:1};">
     <button onclick="toggleCompletado(${t.id})" style="width:22px;height:22px;border-radius:50%;border:1.5px solid ${isDone?cat.color:'#E0DDD7'};background:${isDone?cat.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;">${isDone?'✓':''}</button>
     <div style="width:3px;min-height:30px;border-radius:2px;flex-shrink:0;background:${cat.color};"></div>
-    <div style="flex:1;min-width:0;">
-      <p style="font-size:14.5px;font-weight:600;color:${isDone?'#aaa':'#1a1a1a'};${isDone?'text-decoration:line-through;':''}overflow:hidden;text-overflow:ellipsis;">${esc(t.texto)}</p>
+    <div style="flex:1;min-width:0;" onclick="editarTexto(${t.id})">
+      <p style="font-size:14.5px;font-weight:600;color:${isDone?'#aaa':'#1a1a1a'};${isDone?'text-decoration:line-through;':''}overflow:hidden;text-overflow:ellipsis;cursor:pointer;">${esc(t.texto)}</p>
+      <span style="font-size:11px;font-weight:500;color:${cat.color};background:${cat.color}14;padding:2px 8px;border-radius:20px;display:inline-block;margin-top:4px;">${cat.label}</span>
+    </div>
+    ${S.eliminarId===t.id ? `
+      <div style="display:flex;gap:5px;flex-shrink:0;">
+        <button onclick="accionEliminar(${t.id})" style="font-size:11px;font-weight:600;color:#D94F3D;background:#D94F3D14;border-radius:6px;padding:4px 9px;">Eliminar</button>
+        <button onclick="S.eliminarId=null;render()" style="font-size:11px;color:#999;background:#F0EDE8;border-radius:6px;padding:4px 9px;">Cancelar</button>
+      </div>` : `
+      <button onclick="S.eliminarId=${t.id};render()" style="font-size:16px;color:#ddd;flex-shrink:0;line-height:1;">×</button>
+      ${!isDone ? `<button onclick="enviarASemana(${t.id})" style="font-size:11px;font-weight:600;color:#777;background:#F0EDE8;border-radius:8px;padding:7px 10px;flex-shrink:0;white-space:nowrap;">→ Semana</button>` : ''}
+    `}
+  </div>`;
+}
+
+function filaSemana(t, i, total, isDone, bg) {
+  if (S.editandoId === t.id) return filaEditInput(t);
+  bg = bg || "#fff";
+  const cat = getCategoria(t.categoria);
+  const isFirst = i===0, isLast = i===total-1;
+  const rad = isFirst&&isLast ? "12px" : isFirst ? "12px 12px 4px 4px" : isLast ? "4px 4px 12px 12px" : "4px";
+  return `
+  <div class="task-row" data-id="${t.id}" style="background:${bg};border-radius:${rad};padding:13px 14px;display:flex;align-items:center;gap:11px;opacity:${isDone?0.55:1};">
+    <button onclick="toggleCompletado(${t.id})" style="width:22px;height:22px;border-radius:50%;border:1.5px solid ${isDone?cat.color:'#E0DDD7'};background:${isDone?cat.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;">${isDone?'✓':''}</button>
+    <div style="width:3px;min-height:30px;border-radius:2px;flex-shrink:0;background:${cat.color};"></div>
+    <div style="flex:1;min-width:0;" onclick="editarTexto(${t.id})">
+      <p style="font-size:14.5px;font-weight:600;color:${isDone?'#aaa':'#1a1a1a'};${isDone?'text-decoration:line-through;':''}overflow:hidden;text-overflow:ellipsis;cursor:pointer;">${esc(t.texto)}</p>
       <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
         <span style="font-size:11px;font-weight:500;color:${cat.color};background:${cat.color}14;padding:2px 8px;border-radius:20px;">${cat.label}</span>
-        ${t.estado==='semana'&&t.dia?`<span style="font-size:11px;color:#bbb;">${diaLabel(t.dia)}</span>`:''}
+        ${t.dia?`<span style="font-size:11px;color:#bbb;">${diaLabel(t.dia)}</span>`:''}
       </div>
     </div>
     ${S.eliminarId===t.id ? `
@@ -220,6 +191,7 @@ function taskRowHTML(t, i, total, isDone) {
         <button onclick="accionEliminar(${t.id})" style="font-size:11px;font-weight:600;color:#D94F3D;background:#D94F3D14;border-radius:6px;padding:4px 9px;">Eliminar</button>
         <button onclick="S.eliminarId=null;render()" style="font-size:11px;color:#999;background:#F0EDE8;border-radius:6px;padding:4px 9px;">Cancelar</button>
       </div>` : `
+      <button onclick="volverAMaestra(${t.id})" title="Volver a la lista maestra" style="font-size:15px;color:#ccc;flex-shrink:0;line-height:1;">←</button>
       <button onclick="S.eliminarId=${t.id};render()" style="font-size:16px;color:#ddd;flex-shrink:0;line-height:1;">×</button>
       ${!isDone ? `<div class="drag-handle" onpointerdown="iniciarDrag(event,${t.id})" style="touch-action:none;cursor:grab;color:#ccc;font-size:17px;padding:4px 2px;flex-shrink:0;line-height:1;">≡</div>` : ''}
     `}
@@ -233,12 +205,29 @@ function renderMaestra() {
   return `
   <div style="margin-top:24px;">
     <p style="${LBL}">Lista maestra · ${activos.length}</p>
-    <div data-zone="maestra" style="display:flex;flex-direction:column;gap:1px;min-height:50px;">
-      ${activos.length===0 ? emptyZoneHTML('Arrastra aquí los pendientes que sueltes de la semana') : activos.map((t,i)=>taskRowHTML(t,i,activos.length,false)).join('')}
+    <div style="display:flex;flex-direction:column;gap:1px;">
+      ${activos.length===0 ? emptyZoneHTML('Sin pendientes en la lista maestra') : activos.map((t,i)=>filaMaestra(t,i,activos.length,false)).join('')}
     </div>
     ${hechos.length>0 ? `
     <div style="margin-top:8px;display:flex;flex-direction:column;gap:1px;">
-      ${hechos.map((t,i)=>taskRowHTML(t,i,hechos.length,true)).join('')}
+      ${hechos.map((t,i)=>filaMaestra(t,i,hechos.length,true)).join('')}
+    </div>` : ''}
+  </div>`;
+}
+
+function renderTodosSemana() {
+  const items = S.tasks.filter(t=>t.estado==='semana' && !t.dia && !t.meta_id);
+  const activos = items.filter(t=>!t.completado);
+  const hechos  = items.filter(t=>t.completado);
+  return `
+  <div style="margin-top:30px;">
+    <p style="${LBL}">To dos de la semana · ${activos.length}</p>
+    <div data-zone="bandeja" style="display:flex;flex-direction:column;gap:1px;min-height:50px;">
+      ${activos.length===0 ? emptyZoneHTML('Usa "→ Semana" desde la lista maestra para traer pendientes aquí') : activos.map((t,i)=>filaSemana(t,i,activos.length,false)).join('')}
+    </div>
+    ${hechos.length>0 ? `
+    <div style="margin-top:8px;display:flex;flex-direction:column;gap:1px;">
+      ${hechos.map((t,i)=>filaSemana(t,i,hechos.length,true)).join('')}
     </div>` : ''}
   </div>`;
 }
@@ -254,28 +243,33 @@ function renderMetaForm(cat) {
 }
 
 function renderMeta(m, cat) {
-  const todos = m.todos || [];
+  const todos = S.tasks.filter(t=>t.meta_id===m.id);
   const total = todos.length;
   const hechos = todos.filter(t=>t.completado).length;
   const completa = total>0 && hechos===total;
+  if (S.editandoMetaId === m.id) {
+    return `
+    <div style="background:#fff;border:1.5px solid #1a1a1a;border-radius:14px;padding:14px 16px;margin-bottom:8px;display:flex;gap:8px;align-items:center;">
+      <input id="edit-meta-${m.id}" type="text" value="${esc(m.texto)}"
+        style="flex:1;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:9px 12px;font-size:14px;color:#1a1a1a;"
+        onkeydown="if(event.key==='Enter') guardarEdicionMeta(${m.id}); if(event.key==='Escape') cancelarEdicionMeta();" />
+      <button onclick="guardarEdicionMeta(${m.id})" style="font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:8px;padding:9px 12px;flex-shrink:0;">✓</button>
+      <button onclick="cancelarEdicionMeta()" style="font-size:15px;color:#999;background:#F0EDE8;border-radius:8px;padding:9px 12px;flex-shrink:0;line-height:1;">×</button>
+    </div>`;
+  }
   return `
-  <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;border:1px solid #E8E6E1;">
+  <div data-zone="meta" data-meta="${m.id}" style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;border:1px solid #E8E6E1;">
     <div style="display:flex;align-items:flex-start;gap:10px;">
       <div style="width:20px;height:20px;border-radius:6px;border:1.5px solid ${completa?cat.color:'#E0DDD7'};background:${completa?cat.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;margin-top:1px;">${completa?'✓':''}</div>
-      <div style="flex:1;min-width:0;">
-        <p style="font-size:14.5px;font-weight:600;color:${completa?'#aaa':'#1a1a1a'};${completa?'text-decoration:line-through;':''}">${esc(m.texto)}</p>
+      <div style="flex:1;min-width:0;" onclick="editarMeta(${m.id})">
+        <p style="font-size:14.5px;font-weight:600;color:${completa?'#aaa':'#1a1a1a'};${completa?'text-decoration:line-through;':''}cursor:pointer;">${esc(m.texto)}</p>
         ${total>0?`<p style="font-size:11px;color:#bbb;margin-top:2px;">${hechos}/${total} listo${total===1?'':'s'}</p>`:''}
       </div>
       <button onclick="eliminarMeta(${m.id})" style="font-size:15px;color:#ddd;flex-shrink:0;line-height:1;">×</button>
     </div>
-    <div style="margin-top:10px;display:flex;flex-direction:column;gap:7px;padding-left:30px;">
-      ${todos.map(t=>`
-        <div style="display:flex;align-items:center;gap:10px;">
-          <button onclick="toggleMetaTodo(${t.id})" style="width:18px;height:18px;border-radius:50%;border:1.5px solid ${t.completado?cat.color:'#E0DDD7'};background:${t.completado?cat.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;">${t.completado?'✓':''}</button>
-          <p style="font-size:13.5px;color:${t.completado?'#bbb':'#444'};${t.completado?'text-decoration:line-through;':''}flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;">${esc(t.texto)}</p>
-          <button onclick="eliminarMetaTodo(${t.id},${m.id})" style="font-size:14px;color:#ddd;flex-shrink:0;">×</button>
-        </div>`).join('')}
-      <div style="display:flex;gap:6px;margin-top:2px;">
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:1px;padding-left:30px;">
+      ${total===0 ? `<p style="font-size:12px;color:#ccc;padding:4px 0 8px;">Arrastra to dos aquí, o agrega uno nuevo</p>` : todos.map((t,i)=>filaSemana(t,i,total,t.completado,'#F7F6F3')).join('')}
+      <div style="display:flex;gap:6px;margin-top:8px;">
         <input id="inp-todo-${m.id}" type="text" placeholder="Agregar to do..."
           style="flex:1;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:7px 10px;font-size:13px;color:#1a1a1a;"
           onkeydown="if(event.key==='Enter') guardarMetaTodo(${m.id})" />
@@ -313,23 +307,36 @@ function renderDia(d) {
   return `
   <div style="margin-bottom:16px;">
     <p style="font-size:12px;font-weight:600;color:#999;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;">${d.label}</p>
-    <div data-zone="semana" data-dia="${d.id}" style="display:flex;flex-direction:column;gap:1px;min-height:46px;">
+    <div data-zone="dia" data-dia="${d.id}" style="display:flex;flex-direction:column;gap:1px;min-height:46px;">
       ${activos.length===0 && hechos.length===0 ? emptyZoneHTML('Sin pendientes') : ''}
-      ${activos.map((t,i)=>taskRowHTML(t,i,activos.length,false)).join('')}
-      ${hechos.map((t,i)=>taskRowHTML(t,i,hechos.length,true)).join('')}
+      ${activos.map((t,i)=>filaSemana(t,i,activos.length,false)).join('')}
+      ${hechos.map((t,i)=>filaSemana(t,i,hechos.length,true)).join('')}
     </div>
   </div>`;
 }
 
-function renderSemana() {
+function renderRecordatorios() {
   return `
   <div style="margin-top:30px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <p style="${LBL}margin-bottom:0;">Recordatorios</p>
-      <button onclick="S.confirmSemana=true;render()" style="font-size:12px;font-weight:600;color:#777;background:#fff;border:1.5px solid #E8E6E1;border-radius:20px;padding:6px 14px;">Planear nueva semana</button>
-    </div>
+    <p style="${LBL}">Recordatorios</p>
     ${DIAS.map(d=>renderDia(d)).join('')}
   </div>`;
+}
+
+function renderBotonPlanear() {
+  return `
+  <div style="margin-top:20px;display:flex;justify-content:flex-end;">
+    <button onclick="S.confirmSemana=true;render()" style="font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:20px;padding:9px 18px;">Planear nueva semana</button>
+  </div>`;
+}
+
+function renderSemanaTab() {
+  return `
+    ${renderBotonPlanear()}
+    ${renderEnfoques()}
+    ${renderTodosSemana()}
+    ${renderRecordatorios()}
+  `;
 }
 
 function renderForm() {
@@ -358,9 +365,20 @@ function renderConfirmSemana() {
   const pendientes  = semana.filter(t=>!t.completado).length;
   return `
   <div onclick="if(event.target===this){S.confirmSemana=false;render();}" style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:24px;z-index:10000;">
-    <div style="background:#fff;border-radius:16px;padding:24px;max-width:340px;width:100%;">
-      <p style="font-family:'Playfair Display',serif;font-size:19px;font-weight:700;color:#1a1a1a;margin-bottom:10px;">Planear nueva semana</p>
-      <p style="font-size:13.5px;color:#777;line-height:1.5;margin-bottom:18px;">Se eliminarán ${completados} pendiente${completados!==1?'s':''} completado${completados!==1?'s':''} de la semana, y ${pendientes} pendiente${pendientes!==1?'s':''} sin terminar volverá${pendientes===1?'':'n'} a la lista maestra.</p>
+    <div style="background:#fff;border-radius:16px;padding:24px;max-width:360px;width:100%;">
+      <p style="font-family:'Playfair Display',serif;font-size:19px;font-weight:700;color:#1a1a1a;margin-bottom:8px;">Planear nueva semana</p>
+      <p style="font-size:13px;color:#999;line-height:1.5;margin-bottom:16px;">Los ${completados} pendiente${completados!==1?'s':''} completado${completados!==1?'s':''} de la semana se eliminan siempre. Elige qué más hacer con los ${pendientes} pendiente${pendientes!==1?'s':''} sin terminar:</p>
+
+      <div onclick="S.opcionPasarMaestra=!S.opcionPasarMaestra;render()" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px;border-radius:10px;margin-bottom:8px;background:${S.opcionPasarMaestra?'#1a1a1a0A':'#F7F6F3'};">
+        <div style="width:18px;height:18px;border-radius:5px;border:1.5px solid ${S.opcionPasarMaestra?'#1a1a1a':'#E0DDD7'};background:${S.opcionPasarMaestra?'#1a1a1a':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;margin-top:1px;">${S.opcionPasarMaestra?'✓':''}</div>
+        <p style="font-size:13.5px;color:#444;line-height:1.4;">Pasar los pendientes sin terminar de la semana a la lista maestra</p>
+      </div>
+
+      <div onclick="S.opcionBorrarMetas=!S.opcionBorrarMetas;render()" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px;border-radius:10px;margin-bottom:18px;background:${S.opcionBorrarMetas?'#D94F3D0A':'#F7F6F3'};">
+        <div style="width:18px;height:18px;border-radius:5px;border:1.5px solid ${S.opcionBorrarMetas?'#D94F3D':'#E0DDD7'};background:${S.opcionBorrarMetas?'#D94F3D':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;margin-top:1px;">${S.opcionBorrarMetas?'✓':''}</div>
+        <p style="font-size:13.5px;color:#444;line-height:1.4;">Borrar todas las metas y sus to dos</p>
+      </div>
+
       <div style="display:flex;gap:8px;">
         <button onclick="S.confirmSemana=false;render()" style="flex:1;padding:12px;border-radius:12px;font-size:14px;font-weight:500;background:#F0EDE8;color:#888;">Cancelar</button>
         <button onclick="ejecutarPlanearSemana()" style="flex:1;padding:12px;border-radius:12px;font-size:14px;font-weight:600;background:#1a1a1a;color:#fff;">Confirmar</button>
@@ -374,25 +392,21 @@ function render() {
   <div style="min-height:100vh;background:#F7F6F3;">
     <div class="safe-top" style="background:#fff;border-bottom:1px solid #E8E6E1;padding:20px 20px 16px;">
       <div style="max-width:560px;margin:0 auto;">
-        <p style="font-size:11px;font-weight:500;color:#bbb;letter-spacing:1px;text-transform:uppercase;">Plan semanal</p>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
           <h1 style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:#1a1a1a;">Planeación</h1>
           <button onclick="toggleForm()" style="width:38px;height:38px;border-radius:50%;background:${S.mostrarForm?"#f0ede8":"#1a1a1a"};color:${S.mostrarForm?"#999":"#fff"};font-size:20px;display:flex;align-items:center;justify-content:center;">
             ${S.mostrarForm?"×":"+"}
           </button>
         </div>
+        <div style="display:flex;gap:6px;margin-top:14px;">
+          <button onclick="S.tab='maestra';render()" style="padding:7px 18px;border-radius:20px;font-size:13px;font-weight:500;background:${S.tab==='maestra'?'#1a1a1a':'transparent'};color:${S.tab==='maestra'?'#fff':'#999'};border:1.5px solid ${S.tab==='maestra'?'#1a1a1a':'#E8E6E1'};">Lista maestra</button>
+          <button onclick="S.tab='semana';render()" style="padding:7px 18px;border-radius:20px;font-size:13px;font-weight:500;background:${S.tab==='semana'?'#1a1a1a':'transparent'};color:${S.tab==='semana'?'#fff':'#999'};border:1.5px solid ${S.tab==='semana'?'#1a1a1a':'#E8E6E1'};">Esta semana</button>
+        </div>
       </div>
     </div>
     <div class="safe-bot" style="max-width:560px;margin:0 auto;padding:0 16px;">
-      ${(!localStorage.getItem(IMPORT_KEY) && IMPORT_ITEMS.length>0) ? `
-      <div class="fade" style="background:#fff;border:1.5px dashed #E8E6E1;border-radius:14px;padding:16px;margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
-        <p style="font-size:13px;color:#777;line-height:1.4;">Tienes ${IMPORT_ITEMS.length} pendientes de tu libreta listos para importar a la lista maestra</p>
-        <button id="btn-importar" onclick="importarLista()" style="font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:20px;padding:8px 16px;flex-shrink:0;white-space:nowrap;">Importar</button>
-      </div>` : ''}
       ${S.mostrarForm ? renderForm() : ''}
-      ${renderMaestra()}
-      ${renderEnfoques()}
-      ${renderSemana()}
+      ${S.tab==='maestra' ? renderMaestra() : renderSemanaTab()}
     </div>
   </div>
   ${S.confirmSemana ? renderConfirmSemana() : ''}`;
@@ -419,7 +433,7 @@ async function accionGuardar() {
   if (!texto) { alert("Escribe el pendiente"); return; }
   const btn = document.getElementById("btn-agregar");
   if (btn) { btn.innerText = "Guardando..."; btn.style.opacity = ".6"; btn.disabled = true; }
-  const obj = { texto, categoria: S.form.categoria, estado: "maestra", dia: null, completado: false };
+  const obj = { texto, categoria: S.form.categoria, estado: "maestra", dia: null, meta_id: null, completado: false };
   try {
     const guardado = await dbGuardar(obj);
     if (guardado) S.tasks.push(guardado);
@@ -450,11 +464,29 @@ async function accionEliminar(id) {
   } catch(e) { alert("Error al eliminar: " + e.message); }
 }
 
-async function moverTask(id, zona, dia) {
+async function enviarASemana(id) {
+  const obj = { estado:"semana", dia:null, meta_id:null };
+  S.tasks = S.tasks.map(x=>x.id===id?{...x,...obj}:x);
+  render();
+  try { await dbActualizar(id, obj); } catch(e) { alert("Error: " + e.message); }
+}
+
+async function volverAMaestra(id) {
+  const obj = { estado:"maestra", dia:null, meta_id:null };
+  S.tasks = S.tasks.map(x=>x.id===id?{...x,...obj}:x);
+  render();
+  try { await dbActualizar(id, obj); } catch(e) { alert("Error: " + e.message); }
+}
+
+async function moverTask(id, zona, extra) {
   const t = S.tasks.find(x=>x.id===id);
   if (!t) return;
-  if (t.estado===zona && (t.dia||null)===(dia||null)) return;
-  const obj = zona==="maestra" ? {estado:"maestra", dia:null} : {estado:"semana", dia:dia};
+  let obj;
+  if (zona === "bandeja") obj = { estado:"semana", dia:null, meta_id:null };
+  else if (zona === "dia") obj = { estado:"semana", dia:extra, meta_id:null };
+  else if (zona === "meta") obj = { estado:"semana", dia:null, meta_id:Number(extra) };
+  else return;
+  if (t.estado===obj.estado && (t.dia||null)===(obj.dia||null) && (t.meta_id||null)===(obj.meta_id||null)) return;
   S.tasks = S.tasks.map(x=>x.id===id?{...x,...obj}:x);
   render();
   try { await dbActualizar(id, obj); } catch(e) { alert("Error al mover: " + e.message); }
@@ -463,17 +495,33 @@ async function moverTask(id, zona, dia) {
 async function ejecutarPlanearSemana() {
   const semana = S.tasks.filter(t=>t.estado==='semana');
   const aEliminar = semana.filter(t=>t.completado);
-  const aRegresar = semana.filter(t=>!t.completado);
+  const incompletos = semana.filter(t=>!t.completado);
+  const pasarAMaestra = S.opcionPasarMaestra;
+  const borrarMetas = S.opcionBorrarMetas;
   S.confirmSemana = false;
   render();
   try {
     await Promise.all(aEliminar.map(t=>dbEliminar(t.id)));
-    await Promise.all(aRegresar.map(t=>dbActualizar(t.id, {estado:"maestra", dia:null})));
     const eliminarIds = new Set(aEliminar.map(t=>t.id));
-    const regresarIds = new Set(aRegresar.map(t=>t.id));
-    S.tasks = S.tasks
-      .filter(t=>!eliminarIds.has(t.id))
-      .map(t=> regresarIds.has(t.id) ? {...t, estado:"maestra", dia:null} : t);
+    let tasksNuevas = S.tasks.filter(t=>!eliminarIds.has(t.id));
+
+    if (pasarAMaestra) {
+      await Promise.all(incompletos.map(t=>dbActualizar(t.id, {estado:"maestra", dia:null, meta_id:null})));
+      const regresarIds = new Set(incompletos.map(t=>t.id));
+      tasksNuevas = tasksNuevas.map(t=> regresarIds.has(t.id) ? {...t, estado:"maestra", dia:null, meta_id:null} : t);
+    }
+
+    let metasNuevas = S.metas;
+    if (borrarMetas) {
+      await Promise.all(S.metas.map(m=>dbEliminarMeta(m.id)));
+      metasNuevas = [];
+      if (!pasarAMaestra) {
+        tasksNuevas = tasksNuevas.map(t=> t.meta_id ? {...t, meta_id:null} : t);
+      }
+    }
+
+    S.tasks = tasksNuevas;
+    S.metas = metasNuevas;
     render();
   } catch(e) {
     alert("Error: " + e.message);
@@ -481,7 +529,6 @@ async function ejecutarPlanearSemana() {
   }
 }
 
-// ── Acciones: Enfoques / Metas / To dos ─────────────────────────────────
 function toggleMetaForm(catId) {
   S.metaFormCat = S.metaFormCat === catId ? null : catId;
   render();
@@ -494,17 +541,18 @@ async function guardarMeta(catId) {
   if (!texto) return;
   try {
     const guardado = await dbGuardarMeta({ categoria: catId, texto });
-    if (guardado) { guardado.todos = []; S.metas.push(guardado); }
+    if (guardado) S.metas.push(guardado);
     S.metaFormCat = null;
     render();
   } catch(e) { alert("Error al guardar meta: " + e.message); }
 }
 
 async function eliminarMeta(id) {
-  if (!confirm("¿Eliminar esta meta y sus to dos?")) return;
+  if (!confirm("¿Eliminar esta meta? Sus to dos volverán a 'Por asignar'.")) return;
   try {
     await dbEliminarMeta(id);
     S.metas = S.metas.filter(m=>m.id!==id);
+    S.tasks = S.tasks.map(t=> t.meta_id===id ? {...t, meta_id:null} : t);
     render();
   } catch(e) { alert("Error: " + e.message); }
 }
@@ -513,32 +561,57 @@ async function guardarMetaTodo(metaId) {
   const inp = document.getElementById("inp-todo-" + metaId);
   const texto = inp ? inp.value.trim() : "";
   if (!texto) return;
+  const m = S.metas.find(x=>x.id===metaId);
+  const categoria = m ? m.categoria : "release";
   try {
-    const guardado = await dbGuardarMetaTodo({ meta_id: metaId, texto, completado: false });
-    const m = S.metas.find(x=>x.id===metaId);
-    if (guardado && m) { if (!m.todos) m.todos = []; m.todos.push(guardado); }
+    const guardado = await dbGuardar({ texto, categoria, estado:"semana", dia:null, meta_id:metaId, completado:false });
+    if (guardado) S.tasks.push(guardado);
     render();
     setTimeout(() => { const i = document.getElementById("inp-todo-" + metaId); if(i) i.focus(); }, 100);
   } catch(e) { alert("Error al guardar to do: " + e.message); }
 }
 
-async function toggleMetaTodo(id) {
-  let nuevo = null;
-  S.metas.forEach(m => { (m.todos||[]).forEach(t => { if (t.id===id) { nuevo = !t.completado; t.completado = nuevo; } }); });
+// ── Edición de texto: pendientes ─────────────────────────────────────────
+function editarTexto(id) {
+  S.editandoId = id;
+  S.eliminarId = null;
   render();
-  try { await dbActualizarMetaTodo(id, {completado:nuevo}); } catch(e) { alert("Error: " + e.message); }
+  setTimeout(() => { const i = document.getElementById("edit-texto-" + id); if(i){ i.focus(); i.select(); } }, 50);
+}
+function cancelarEdicionTexto() {
+  S.editandoId = null;
+  render();
+}
+async function guardarEdicionTexto(id) {
+  const inp = document.getElementById("edit-texto-" + id);
+  const texto = inp ? inp.value.trim() : "";
+  if (!texto) { alert("El texto no puede quedar vacío"); return; }
+  S.tasks = S.tasks.map(x=>x.id===id?{...x, texto}:x);
+  S.editandoId = null;
+  render();
+  try { await dbActualizar(id, {texto}); } catch(e) { alert("Error al editar: " + e.message); }
 }
 
-async function eliminarMetaTodo(id, metaId) {
-  try {
-    await dbEliminarMetaTodo(id);
-    const m = S.metas.find(x=>x.id===metaId);
-    if (m) m.todos = (m.todos||[]).filter(t=>t.id!==id);
-    render();
-  } catch(e) { alert("Error: " + e.message); }
+// ── Edición de texto: metas ───────────────────────────────────────────────
+function editarMeta(id) {
+  S.editandoMetaId = id;
+  render();
+  setTimeout(() => { const i = document.getElementById("edit-meta-" + id); if(i){ i.focus(); i.select(); } }, 50);
+}
+function cancelarEdicionMeta() {
+  S.editandoMetaId = null;
+  render();
+}
+async function guardarEdicionMeta(id) {
+  const inp = document.getElementById("edit-meta-" + id);
+  const texto = inp ? inp.value.trim() : "";
+  if (!texto) { alert("El texto no puede quedar vacío"); return; }
+  S.metas = S.metas.map(m=>m.id===id?{...m, texto}:m);
+  S.editandoMetaId = null;
+  render();
+  try { await dbActualizarMeta(id, {texto}); } catch(e) { alert("Error al editar: " + e.message); }
 }
 
-// ── Drag & drop (pointer events: funciona con mouse y touch) ───────────
 let dragState = null;
 
 function iniciarDrag(e, id) {
@@ -591,12 +664,12 @@ function soltarDrag(e) {
   dragState = null;
   if (zoneEl) {
     const zona = zoneEl.dataset.zone;
-    const dia = zoneEl.dataset.dia || null;
-    moverTask(id, zona, dia);
+    if (zona === "dia") moverTask(id, "dia", zoneEl.dataset.dia);
+    else if (zona === "meta") moverTask(id, "meta", zoneEl.dataset.meta);
+    else if (zona === "bandeja") moverTask(id, "bandeja", null);
   }
 }
 
-// ── Init ────────────────────────────────────────────────────────────────
 function iniciarApp() {
   document.getElementById("app").innerHTML = `
     <div style="min-height:100vh;background:#F7F6F3;display:flex;align-items:center;justify-content:center;">
