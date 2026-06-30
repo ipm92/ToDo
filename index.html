@@ -42,7 +42,7 @@ const API_METAS = SUPABASE_URL + "/rest/v1/metas";
 // Sube este número cada vez que subas un cambio nuevo del archivo a GitHub.
 // Así, cualquiera que tenga la app abierta con una versión vieja en caché
 // se actualiza solo, sin tener que limpiar caché ni escribir ?v= a mano.
-const APP_VERSION = "1";
+const APP_VERSION = "3";
 
 function xhr(method, url, body) {
   return new Promise((resolve, reject) => {
@@ -66,7 +66,7 @@ function xhr(method, url, body) {
   });
 }
 async function dbCargar() {
-  return await xhr("GET", API + "?order=created_at.asc&apikey=" + SUPABASE_KEY);
+  return await xhr("GET", API + "?order=orden.asc.nullslast,created_at.asc&apikey=" + SUPABASE_KEY);
 }
 async function dbGuardar(obj) {
   const res = await xhr("POST", API + "?apikey=" + SUPABASE_KEY, obj);
@@ -94,6 +94,22 @@ async function dbActualizarMeta(id, obj) {
   return Array.isArray(res) ? res[0] : res;
 }
 
+const API_ENFOQUES = SUPABASE_URL + "/rest/v1/enfoques";
+async function dbCargarEnfoques() {
+  return await xhr("GET", API_ENFOQUES + "?order=created_at.asc&apikey=" + SUPABASE_KEY);
+}
+async function dbGuardarEnfoque(obj) {
+  const res = await xhr("POST", API_ENFOQUES + "?apikey=" + SUPABASE_KEY, obj);
+  return Array.isArray(res) ? res[0] : res;
+}
+async function dbActualizarEnfoque(id, obj) {
+  const res = await xhr("PATCH", API_ENFOQUES + "?id=eq." + id + "&apikey=" + SUPABASE_KEY, obj);
+  return Array.isArray(res) ? res[0] : res;
+}
+async function dbEliminarEnfoque(id) {
+  await xhr("DELETE", API_ENFOQUES + "?id=eq." + id + "&apikey=" + SUPABASE_KEY);
+}
+
 // ── Datos ──────────────────────────────────────────────────────────────
 const CATEGORIAS = [
   { id:"release",    label:"Release",   color:"#EF6C04" },
@@ -110,6 +126,7 @@ const DIAS = [
   { id:"jueves",    label:"Jueves" },
   { id:"viernes",   label:"Viernes" },
 ];
+const COLOR_PALETTE = ["#EF6C04","#0A8043","#7BB443","#BFC932","#8E24AA","#1E88E5","#D94F3D","#00897B","#5E35B1","#C2185B"];
 
 function getCategoria(id) { return CATEGORIAS.find(c=>c.id===id) || CATEGORIAS[0]; }
 function diaLabel(id) { const d = DIAS.find(x=>x.id===id); return d ? d.label : ""; }
@@ -121,7 +138,11 @@ const S = {
   tab: "semana",
   tasks: [],
   metas: [],
+  enfoques: [],
   metaFormCat: null,
+  enfoqueFormAbierto: false,
+  enfoqueColorSel: COLOR_PALETTE[0],
+  editandoEnfoqueId: null,
   maestraAbiertas: {},
   mostrarForm: false,
   formDestino: "maestra",
@@ -177,20 +198,22 @@ function filaMaestra(t, i, total, isDone) {
   </div>`;
 }
 
-function filaSemana(t, i, total, isDone, bg) {
+function filaSemana(t, i, total, isDone, bg, override) {
   if (S.editandoId === t.id) return filaEditInput(t);
   bg = bg || "#fff";
   const cat = getCategoria(t.categoria);
+  const color = override ? override.color : cat.color;
+  const label = override ? override.label : cat.label;
   const isFirst = i===0, isLast = i===total-1;
   const rad = isFirst&&isLast ? "12px" : isFirst ? "12px 12px 4px 4px" : isLast ? "4px 4px 12px 12px" : "4px";
   return `
   <div class="task-row" data-id="${t.id}" style="background:${bg};border-radius:${rad};padding:13px 14px;display:flex;align-items:center;gap:11px;opacity:${isDone?0.55:1};">
-    <button onclick="toggleCompletado(${t.id})" style="width:22px;height:22px;border-radius:50%;border:1.5px solid ${isDone?cat.color:'#E0DDD7'};background:${isDone?cat.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;">${isDone?'✓':''}</button>
-    <div style="width:3px;min-height:30px;border-radius:2px;flex-shrink:0;background:${cat.color};"></div>
+    <button onclick="toggleCompletado(${t.id})" style="width:22px;height:22px;border-radius:50%;border:1.5px solid ${isDone?color:'#E0DDD7'};background:${isDone?color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;">${isDone?'✓':''}</button>
+    <div style="width:3px;min-height:30px;border-radius:2px;flex-shrink:0;background:${color};"></div>
     <div style="flex:1;min-width:0;" onclick="editarTexto(${t.id})">
       <p style="font-size:14.5px;font-weight:600;color:${isDone?'#aaa':'#1a1a1a'};${isDone?'text-decoration:line-through;':''}overflow:hidden;text-overflow:ellipsis;cursor:pointer;">${esc(t.texto)}</p>
       <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
-        <span style="font-size:11px;font-weight:500;color:${cat.color};background:${cat.color}14;padding:2px 8px;border-radius:20px;">${cat.label}</span>
+        <span style="font-size:11px;font-weight:500;color:${color};background:${color}14;padding:2px 8px;border-radius:20px;">${esc(label)}</span>
         ${t.dia?`<span style="font-size:11px;color:#bbb;">${diaLabel(t.dia)}</span>`:''}
       </div>
     </div>
@@ -265,21 +288,22 @@ function renderTodosSemana() {
   </div>`;
 }
 
-function renderMetaForm(cat) {
+function renderMetaForm(enfoque) {
   return `
   <div class="fade" style="background:#fff;border:1px solid #E8E6E1;border-radius:12px;padding:12px;margin-bottom:8px;display:flex;gap:8px;">
-    <input id="inp-meta-${cat.id}" type="text" placeholder="Nueva meta de ${cat.label}"
+    <input id="inp-meta-${enfoque.id}" type="text" placeholder="Nueva meta de ${esc(enfoque.texto)}"
       style="flex:1;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:9px 12px;font-size:13.5px;color:#1a1a1a;"
-      onkeydown="if(event.key==='Enter') guardarMeta('${cat.id}')" />
-    <button onclick="guardarMeta('${cat.id}')" style="font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:8px;padding:9px 14px;flex-shrink:0;">Listo</button>
+      onkeydown="if(event.key==='Enter') guardarMeta(${enfoque.id})" />
+    <button onclick="guardarMeta(${enfoque.id})" style="font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:8px;padding:9px 14px;flex-shrink:0;">Listo</button>
   </div>`;
 }
 
-function renderMeta(m, cat) {
+function renderMeta(m, enfoque) {
   const todos = S.tasks.filter(t=>t.meta_id===m.id);
   const total = todos.length;
   const hechos = todos.filter(t=>t.completado).length;
   const completa = !!m.completado;
+  const override = { color: enfoque.color, label: enfoque.texto };
   if (S.editandoMetaId === m.id) {
     return `
     <div style="background:#fff;border:1.5px solid #1a1a1a;border-radius:14px;padding:14px 16px;margin-bottom:8px;display:flex;gap:8px;align-items:center;">
@@ -293,7 +317,7 @@ function renderMeta(m, cat) {
   return `
   <div data-zone="meta" data-meta="${m.id}" style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;border:1px solid #E8E6E1;">
     <div style="display:flex;align-items:flex-start;gap:10px;">
-      <button onclick="toggleMetaCompletado(${m.id})" style="width:20px;height:20px;border-radius:6px;border:1.5px solid ${completa?cat.color:'#E0DDD7'};background:${completa?cat.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;margin-top:1px;">${completa?'✓':''}</button>
+      <button onclick="toggleMetaCompletado(${m.id})" style="width:20px;height:20px;border-radius:6px;border:1.5px solid ${completa?enfoque.color:'#E0DDD7'};background:${completa?enfoque.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;margin-top:1px;">${completa?'✓':''}</button>
       <div style="flex:1;min-width:0;" onclick="editarMeta(${m.id})">
         <p style="font-size:14.5px;font-weight:600;color:${completa?'#aaa':'#1a1a1a'};${completa?'text-decoration:line-through;':''}cursor:pointer;">${esc(m.texto)}</p>
         ${total>0?`<p style="font-size:11px;color:#bbb;margin-top:2px;">${hechos}/${total} listo${total===1?'':'s'}</p>`:''}
@@ -301,7 +325,7 @@ function renderMeta(m, cat) {
       <button onclick="eliminarMeta(${m.id})" style="font-size:15px;color:#ddd;flex-shrink:0;line-height:1;">×</button>
     </div>
     <div style="margin-top:10px;display:flex;flex-direction:column;gap:1px;padding-left:30px;">
-      ${total===0 ? `<p style="font-size:12px;color:#ccc;padding:4px 0 8px;">Arrastra to dos aquí, o agrega uno nuevo</p>` : todos.map((t,i)=>filaSemana(t,i,total,t.completado,'#F7F6F3')).join('')}
+      ${total===0 ? `<p style="font-size:12px;color:#ccc;padding:4px 0 8px;">Arrastra to dos aquí, o agrega uno nuevo</p>` : todos.map((t,i)=>filaSemana(t,i,total,t.completado,'#F7F6F3',override)).join('')}
       <div style="display:flex;gap:6px;margin-top:8px;">
         <input id="inp-todo-${m.id}" type="text" placeholder="Agregar to do..."
           style="flex:1;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:7px 10px;font-size:13px;color:#1a1a1a;"
@@ -312,27 +336,59 @@ function renderMeta(m, cat) {
   </div>`;
 }
 
-function renderEnfoque(cat) {
-  const metas = S.metas.filter(m=>m.categoria===cat.id);
+function renderEnfoqueBlock(enfoque) {
+  const metas = S.metas.filter(m=>m.enfoque_id===enfoque.id);
+  if (S.editandoEnfoqueId === enfoque.id) {
+    return `
+    <div style="background:#fff;border:1.5px solid #1a1a1a;border-radius:14px;padding:14px 16px;margin-bottom:22px;display:flex;gap:8px;align-items:center;">
+      <input id="edit-enfoque-${enfoque.id}" type="text" value="${esc(enfoque.texto)}"
+        style="flex:1;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:9px 12px;font-size:14px;color:#1a1a1a;"
+        onkeydown="if(event.key==='Enter') guardarEdicionEnfoque(${enfoque.id}); if(event.key==='Escape') cancelarEdicionEnfoque();" />
+      <button onclick="guardarEdicionEnfoque(${enfoque.id})" style="font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:8px;padding:9px 12px;flex-shrink:0;">✓</button>
+      <button onclick="cancelarEdicionEnfoque()" style="font-size:15px;color:#999;background:#F0EDE8;border-radius:8px;padding:9px 12px;flex-shrink:0;line-height:1;">×</button>
+    </div>`;
+  }
   return `
   <div style="margin-bottom:22px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <span style="font-size:13px;font-weight:700;color:${cat.color};letter-spacing:.3px;text-transform:uppercase;">${cat.label}</span>
-      <button onclick="toggleMetaForm('${cat.id}')" style="font-size:12px;font-weight:600;color:#777;background:#fff;border:1.5px solid #E8E6E1;border-radius:20px;padding:5px 12px;">+ Meta</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;">
+      <span onclick="editarEnfoque(${enfoque.id})" style="font-size:13px;font-weight:700;color:${enfoque.color};letter-spacing:.3px;text-transform:uppercase;cursor:pointer;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;">${esc(enfoque.texto)}</span>
+      <button onclick="toggleMetaForm(${enfoque.id})" style="font-size:12px;font-weight:600;color:#777;background:#fff;border:1.5px solid #E8E6E1;border-radius:20px;padding:5px 12px;flex-shrink:0;">+ Meta</button>
+      <button onclick="eliminarEnfoque(${enfoque.id})" style="font-size:15px;color:#ddd;flex-shrink:0;line-height:1;">×</button>
     </div>
-    ${S.metaFormCat===cat.id ? renderMetaForm(cat) : ''}
-    <div data-zone="nueva-meta" data-categoria="${cat.id}" style="border:1.5px dashed #E8E6E1;border-radius:12px;padding:9px;margin-bottom:8px;text-align:center;">
+    ${S.metaFormCat===enfoque.id ? renderMetaForm(enfoque) : ''}
+    <div data-zone="nueva-meta" data-enfoque="${enfoque.id}" style="border:1.5px dashed #E8E6E1;border-radius:12px;padding:9px;margin-bottom:8px;text-align:center;">
       <p style="font-size:11px;color:#ccc;">Suelta aquí un to do para convertirlo en meta</p>
     </div>
-    ${metas.length===0 ? `<p style="font-size:12px;color:#ccc;padding:2px 0 0;">Sin metas todavía</p>` : metas.map(m=>renderMeta(m,cat)).join('')}
+    ${metas.length===0 ? `<p style="font-size:12px;color:#ccc;padding:2px 0 0;">Sin metas todavía</p>` : metas.map(m=>renderMeta(m,enfoque)).join('')}
+  </div>`;
+}
+
+function renderEnfoqueForm() {
+  return `
+  <div class="fade" style="background:#fff;border:1px solid #E8E6E1;border-radius:12px;padding:14px;margin-bottom:16px;">
+    <input id="inp-nuevo-enfoque" type="text" placeholder="Ej. Salud, Casa, Familia..."
+      style="width:100%;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:9px 12px;font-size:13.5px;color:#1a1a1a;margin-bottom:10px;"
+      onkeydown="if(event.key==='Enter') guardarEnfoque()" />
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      ${COLOR_PALETTE.map(c=>`
+        <button onclick="S.enfoqueColorSel='${c}';render()" style="width:26px;height:26px;border-radius:50%;background:${c};border:2px solid ${S.enfoqueColorSel===c?'#1a1a1a':'transparent'};flex-shrink:0;"></button>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="S.enfoqueFormAbierto=false;render()" style="flex:1;font-size:13px;font-weight:500;color:#888;background:#F0EDE8;border-radius:8px;padding:9px;">Cancelar</button>
+      <button onclick="guardarEnfoque()" style="flex:1;font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:8px;padding:9px;">Crear enfoque</button>
+    </div>
   </div>`;
 }
 
 function renderEnfoques() {
   return `
   <div style="margin-top:30px;">
-    <p style="${LBL}">Enfoques de la semana</p>
-    ${CATEGORIAS.map(cat=>renderEnfoque(cat)).join('')}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <p style="${LBL}margin-bottom:0;">Enfoques de la semana</p>
+      <button onclick="S.enfoqueFormAbierto=!S.enfoqueFormAbierto;render()" style="font-size:12px;font-weight:600;color:#777;background:#fff;border:1.5px solid #E8E6E1;border-radius:20px;padding:5px 12px;">+ Enfoque</button>
+    </div>
+    ${S.enfoqueFormAbierto ? renderEnfoqueForm() : ''}
+    ${S.enfoques.length===0 ? `<p style="font-size:12px;color:#ccc;">Crea tu primer enfoque para empezar a ponerle metas</p>` : S.enfoques.map(e=>renderEnfoqueBlock(e)).join('')}
   </div>`;
 }
 
@@ -566,6 +622,38 @@ async function moverTask(id, zona, extra) {
   if (obj.meta_id) recalcMeta(obj.meta_id);
 }
 
+// ── Reordenar dentro de una misma zona (bandeja, día o meta) ────────────
+function idsEnZona(zona, extra) {
+  if (zona === "bandeja") return S.tasks.filter(t=>t.estado==='semana' && !t.dia && !t.meta_id && !t.completado).map(t=>t.id);
+  if (zona === "dia") return S.tasks.filter(t=>t.estado==='semana' && t.dia===extra && !t.completado).map(t=>t.id);
+  if (zona === "meta") return S.tasks.filter(t=>t.meta_id===Number(extra) && !t.completado).map(t=>t.id);
+  return [];
+}
+
+async function reordenarZona(zona, extra, draggedId, overRowId, overBefore) {
+  let ids = idsEnZona(zona, extra).filter(id => id !== draggedId);
+  let index;
+  if (overRowId == null) {
+    index = ids.length;
+  } else {
+    const i = ids.indexOf(Number(overRowId));
+    index = i === -1 ? ids.length : (overBefore ? i : i + 1);
+  }
+  ids.splice(index, 0, draggedId);
+  const updates = ids.map((tid, i) => ({ id: tid, orden: i }));
+  S.tasks = S.tasks.map(t => {
+    const u = updates.find(x=>x.id===t.id);
+    return u ? { ...t, orden: u.orden } : t;
+  });
+  render();
+  try { await Promise.all(updates.map(u => dbActualizar(u.id, { orden: u.orden }))); } catch(e) { /* silencioso */ }
+}
+
+async function manejarSoltar(id, zona, extra, overRowId, overBefore) {
+  await moverTask(id, zona, extra);
+  await reordenarZona(zona, extra, id, overRowId, overBefore);
+}
+
 async function ejecutarPlanearSemana() {
   const semana = S.tasks.filter(t=>t.estado==='semana');
   const aEliminar = semana.filter(t=>t.completado);
@@ -603,18 +691,18 @@ async function ejecutarPlanearSemana() {
   }
 }
 
-function toggleMetaForm(catId) {
-  S.metaFormCat = S.metaFormCat === catId ? null : catId;
+function toggleMetaForm(enfoqueId) {
+  S.metaFormCat = S.metaFormCat === enfoqueId ? null : enfoqueId;
   render();
-  if (S.metaFormCat) setTimeout(() => { const i = document.getElementById("inp-meta-" + catId); if(i) i.focus(); }, 100);
+  if (S.metaFormCat) setTimeout(() => { const i = document.getElementById("inp-meta-" + enfoqueId); if(i) i.focus(); }, 100);
 }
 
-async function guardarMeta(catId) {
-  const inp = document.getElementById("inp-meta-" + catId);
+async function guardarMeta(enfoqueId) {
+  const inp = document.getElementById("inp-meta-" + enfoqueId);
   const texto = inp ? inp.value.trim() : "";
   if (!texto) return;
   try {
-    const guardado = await dbGuardarMeta({ categoria: catId, texto });
+    const guardado = await dbGuardarMeta({ enfoque_id: enfoqueId, texto, completado:false });
     if (guardado) S.metas.push(guardado);
     S.metaFormCat = null;
     render();
@@ -631,12 +719,57 @@ async function eliminarMeta(id) {
   } catch(e) { alert("Error: " + e.message); }
 }
 
-async function convertirEnMeta(id, catId) {
+// ── Acciones: Enfoques (libres, creados por la persona) ─────────────────
+async function guardarEnfoque() {
+  const inp = document.getElementById("inp-nuevo-enfoque");
+  const texto = inp ? inp.value.trim() : "";
+  if (!texto) return;
+  try {
+    const guardado = await dbGuardarEnfoque({ texto, color: S.enfoqueColorSel });
+    if (guardado) S.enfoques.push(guardado);
+    S.enfoqueFormAbierto = false;
+    S.enfoqueColorSel = COLOR_PALETTE[0];
+    render();
+  } catch(e) { alert("Error al guardar enfoque: " + e.message); }
+}
+
+function editarEnfoque(id) {
+  S.editandoEnfoqueId = id;
+  render();
+  setTimeout(() => { const i = document.getElementById("edit-enfoque-" + id); if(i){ i.focus(); i.select(); } }, 50);
+}
+function cancelarEdicionEnfoque() {
+  S.editandoEnfoqueId = null;
+  render();
+}
+async function guardarEdicionEnfoque(id) {
+  const inp = document.getElementById("edit-enfoque-" + id);
+  const texto = inp ? inp.value.trim() : "";
+  if (!texto) { alert("El texto no puede quedar vacío"); return; }
+  S.enfoques = S.enfoques.map(e=>e.id===id?{...e, texto}:e);
+  S.editandoEnfoqueId = null;
+  render();
+  try { await dbActualizarEnfoque(id, {texto}); } catch(e) { alert("Error al editar: " + e.message); }
+}
+
+async function eliminarEnfoque(id) {
+  if (!confirm("¿Eliminar este enfoque? Se eliminarán también sus metas (sus to dos volverán a \"To dos de la semana\").")) return;
+  try {
+    await dbEliminarEnfoque(id);
+    const metaIds = new Set(S.metas.filter(m=>m.enfoque_id===id).map(m=>m.id));
+    S.metas = S.metas.filter(m=>m.enfoque_id!==id);
+    S.enfoques = S.enfoques.filter(e=>e.id!==id);
+    S.tasks = S.tasks.map(t=> metaIds.has(t.meta_id) ? {...t, meta_id:null} : t);
+    render();
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+async function convertirEnMeta(id, enfoqueId) {
   const t = S.tasks.find(x=>x.id===id);
   if (!t) return;
   const metaIdAnterior = t.meta_id || null;
   try {
-    const nuevaMeta = await dbGuardarMeta({ categoria: catId, texto: t.texto, completado: false });
+    const nuevaMeta = await dbGuardarMeta({ enfoque_id: Number(enfoqueId), texto: t.texto, completado: false });
     await dbEliminar(id);
     if (nuevaMeta) S.metas.push(nuevaMeta);
     S.tasks = S.tasks.filter(x=>x.id!==id);
@@ -649,10 +782,8 @@ async function guardarMetaTodo(metaId) {
   const inp = document.getElementById("inp-todo-" + metaId);
   const texto = inp ? inp.value.trim() : "";
   if (!texto) return;
-  const m = S.metas.find(x=>x.id===metaId);
-  const categoria = m ? m.categoria : "release";
   try {
-    const guardado = await dbGuardar({ texto, categoria, estado:"semana", dia:null, meta_id:metaId, completado:false });
+    const guardado = await dbGuardar({ texto, categoria:"release", estado:"semana", dia:null, meta_id:metaId, completado:false });
     if (guardado) S.tasks.push(guardado);
     render();
     setTimeout(() => { const i = document.getElementById("inp-todo-" + metaId); if(i) i.focus(); }, 100);
@@ -722,7 +853,7 @@ function iniciarDrag(e, id) {
   ghost.style.transform = "scale(1.02) rotate(-1deg)";
   document.body.appendChild(ghost);
   row.style.opacity = "0.25";
-  dragState = { id, ghost, row, startX:e.clientX, startY:e.clientY, origTop:rect.top, origLeft:rect.left, zoneEl:null };
+  dragState = { id, ghost, row, startX:e.clientX, startY:e.clientY, origTop:rect.top, origLeft:rect.left, zoneEl:null, overRowId:null, overBefore:null };
   document.addEventListener("pointermove", moverDrag);
   document.addEventListener("pointerup", soltarDrag);
 }
@@ -740,6 +871,16 @@ function moverDrag(e) {
   const zoneEl = el ? el.closest("[data-zone]") : null;
   if (zoneEl) zoneEl.classList.add("zone-active");
   dragState.zoneEl = zoneEl;
+
+  const rowEl = el ? el.closest(".task-row") : null;
+  if (rowEl && rowEl.dataset.id && Number(rowEl.dataset.id) !== dragState.id) {
+    const rowRect = rowEl.getBoundingClientRect();
+    dragState.overRowId = rowEl.dataset.id;
+    dragState.overBefore = (e.clientY - rowRect.top) < (rowRect.height / 2);
+  } else {
+    dragState.overRowId = null;
+    dragState.overBefore = null;
+  }
 }
 
 function soltarDrag(e) {
@@ -749,14 +890,14 @@ function soltarDrag(e) {
   document.querySelectorAll("[data-zone]").forEach(z=>z.classList.remove("zone-active"));
   dragState.ghost.remove();
   if (dragState.row) dragState.row.style.opacity = "1";
-  const { id, zoneEl } = dragState;
+  const { id, zoneEl, overRowId, overBefore } = dragState;
   dragState = null;
   if (zoneEl) {
     const zona = zoneEl.dataset.zone;
-    if (zona === "dia") moverTask(id, "dia", zoneEl.dataset.dia);
-    else if (zona === "meta") moverTask(id, "meta", zoneEl.dataset.meta);
-    else if (zona === "bandeja") moverTask(id, "bandeja", null);
-    else if (zona === "nueva-meta") convertirEnMeta(id, zoneEl.dataset.categoria);
+    if (zona === "dia") manejarSoltar(id, "dia", zoneEl.dataset.dia, overRowId, overBefore);
+    else if (zona === "meta") manejarSoltar(id, "meta", zoneEl.dataset.meta, overRowId, overBefore);
+    else if (zona === "bandeja") manejarSoltar(id, "bandeja", null, overRowId, overBefore);
+    else if (zona === "nueva-meta") convertirEnMeta(id, zoneEl.dataset.enfoque);
   }
 }
 
@@ -765,8 +906,8 @@ function iniciarApp() {
     <div style="min-height:100vh;background:#F7F6F3;display:flex;align-items:center;justify-content:center;">
       <p style="font-size:13px;color:#bbb;font-weight:500;letter-spacing:1px;">Cargando...</p>
     </div>`;
-  Promise.all([dbCargar(), dbCargarMetas()])
-    .then(([tasks, metas]) => { S.tasks = tasks || []; S.metas = metas || []; render(); })
+  Promise.all([dbCargar(), dbCargarMetas(), dbCargarEnfoques()])
+    .then(([tasks, metas, enfoques]) => { S.tasks = tasks || []; S.metas = metas || []; S.enfoques = enfoques || []; render(); })
     .catch(e => {
       document.getElementById("app").innerHTML = `
         <div style="min-height:100vh;background:#F7F6F3;display:flex;align-items:center;justify-content:center;padding:24px;">
