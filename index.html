@@ -42,7 +42,7 @@ const API_METAS = SUPABASE_URL + "/rest/v1/metas";
 // Sube este número cada vez que subas un cambio nuevo del archivo a GitHub.
 // Así, cualquiera que tenga la app abierta con una versión vieja en caché
 // se actualiza solo, sin tener que limpiar caché ni escribir ?v= a mano.
-const APP_VERSION = "15";
+const APP_VERSION = "18";
 
 function xhr(method, url, body) {
   return new Promise((resolve, reject) => {
@@ -185,7 +185,7 @@ function filaMaestra(t, i, total, isDone) {
   const isFirst = i===0, isLast = i===total-1;
   const rad = isFirst&&isLast ? "12px" : isFirst ? "12px 12px 4px 4px" : isLast ? "4px 4px 12px 12px" : "4px";
   return `
-  <div style="background:#fff;border-radius:${rad};padding:13px 14px;display:flex;align-items:center;gap:11px;opacity:${isDone?0.55:1};">
+  <div class="task-row" data-id="${t.id}" style="background:#fff;border-radius:${rad};padding:13px 14px;display:flex;align-items:center;gap:11px;opacity:${isDone?0.55:1};">
     <button onclick="toggleCompletado(${t.id})" style="width:22px;height:22px;border-radius:50%;border:1.5px solid ${isDone?cat.color:'#E0DDD7'};background:${isDone?cat.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;">${isDone?'✓':''}</button>
     <div style="width:3px;min-height:30px;border-radius:2px;flex-shrink:0;background:${cat.color};"></div>
     <div style="flex:1;min-width:0;" onclick="editarTexto(${t.id})">
@@ -199,6 +199,7 @@ function filaMaestra(t, i, total, isDone) {
       </div>` : `
       <button onclick="S.eliminarId=${t.id};render()" style="font-size:16px;color:#ddd;flex-shrink:0;line-height:1;">×</button>
       ${!isDone ? `<button onclick="enviarASemana(${t.id})" style="font-size:11px;font-weight:600;color:#777;background:#F0EDE8;border-radius:8px;padding:7px 10px;flex-shrink:0;white-space:nowrap;">→ Semana</button>` : ''}
+      ${!isDone ? `<div class="drag-handle" onpointerdown="iniciarDrag(event,${t.id})" style="touch-action:none;cursor:grab;color:#ccc;font-size:17px;padding:4px 2px;flex-shrink:0;line-height:1;">≡</div>` : ''}
     `}
   </div>`;
 }
@@ -268,7 +269,7 @@ function renderCategoriaInbox(cat) {
       </span>
     </button>
     ${abierta ? `
-    <div class="fade" style="margin-top:6px;display:flex;flex-direction:column;gap:1px;">
+    <div class="fade" data-zone="categoria" data-cat="${cat.id}" style="margin-top:6px;display:flex;flex-direction:column;gap:1px;">
       ${activos.length===0 ? emptyZoneHTML('Sin pendientes en ' + cat.label) : activos.map((t,i)=>filaMaestra(t,i,activos.length,false)).join('')}
     </div>
     ${hechos.length>0 ? `
@@ -285,22 +286,52 @@ function renderMaestra() {
   </div>`;
 }
 
+function catOrdenIndex(catId) {
+  if (!catId || catId === "sin_clasificar") return 999;
+  const i = CATEGORIAS.findIndex(c=>c.id===catId);
+  return i === -1 ? 999 : i;
+}
+
+function ordenarPorCategoria(lista) {
+  return lista.slice().sort((a,b) => {
+    const ca = catOrdenIndex(a.categoria), cb = catOrdenIndex(b.categoria);
+    if (ca !== cb) return ca - cb;
+    return (a.orden ?? 0) - (b.orden ?? 0);
+  });
+}
+
+function renderGrupoDia(diaId, items) {
+  const d = diaId === "sin" ? null : getDia(diaId);
+  const activos = ordenarPorCategoria(items.filter(t=>!t.completado));
+  return `
+  <div style="margin-bottom:14px;">
+    <p style="font-size:11px;font-weight:600;color:${d?d.color:'#bbb'};letter-spacing:.5px;text-transform:uppercase;margin-bottom:5px;">${d?d.label:'Sin día'}</p>
+    <div data-zone="bandeja" data-dia="${diaId}" style="display:flex;flex-direction:column;gap:1px;min-height:40px;">
+      ${activos.length===0 ? emptyZoneHTML('Sin pendientes aquí') : activos.map((t,i)=>filaSemana(t,i,activos.length,false)).join('')}
+    </div>
+  </div>`;
+}
+
 function renderPorAsignar() {
   const items = S.tasks.filter(t=>t.estado==='semana' && !t.meta_id);
   const activos = items.filter(t=>!t.completado);
   const hechos  = items.filter(t=>t.completado);
+  const grupos = DIAS.map(d=>({ id:d.id, items: activos.filter(t=>t.dia===d.id) })).filter(g=>g.items.length>0);
+  const sinDia = activos.filter(t=>!t.dia);
   return `
   <div style="margin-top:30px;">
-    <p style="${LBL}">Por asignar</p>
-    <div style="display:flex;gap:6px;margin-bottom:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <p style="${LBL}margin-bottom:0;">Por asignar</p>
+      ${hechos.length>0 ? `<button onclick="borrarCompletadosSemana()" style="font-size:12px;font-weight:600;color:#D94F3D;background:#D94F3D14;border-radius:20px;padding:5px 12px;">Borrar ${hechos.length} completado${hechos.length!==1?'s':''}</button>` : ''}
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:14px;">
       <input id="quick-add-semana" type="text" placeholder="Captura rápida, clasifica después..."
         style="flex:1;background:#fff;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 14px;font-size:14px;color:#1a1a1a;"
         onkeydown="if(event.key==='Enter') quickAddSemana()" />
       <button onclick="quickAddSemana()" style="font-size:14px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:10px;padding:10px 16px;flex-shrink:0;">+</button>
     </div>
-    <div data-zone="bandeja" style="display:flex;flex-direction:column;gap:1px;min-height:50px;">
-      ${activos.length===0 ? emptyZoneHTML('Usa "→ Semana" desde Por asignar, o captura aquí mismo') : activos.map((t,i)=>filaSemana(t,i,activos.length,false)).join('')}
-    </div>
+    ${grupos.map(g=>renderGrupoDia(g.id, g.items)).join('')}
+    ${renderGrupoDia("sin", sinDia)}
     ${hechos.length>0 ? `
     <div style="margin-top:8px;display:flex;flex-direction:column;gap:1px;">
       ${hechos.map((t,i)=>filaSemana(t,i,hechos.length,true)).join('')}
@@ -594,6 +625,18 @@ async function accionEliminar(id) {
   } catch(e) { alert("Error al eliminar: " + e.message); }
 }
 
+async function borrarCompletadosSemana() {
+  const completados = S.tasks.filter(t=>t.estado==='semana' && !t.meta_id && t.completado);
+  if (completados.length===0) return;
+  if (!confirm(`¿Eliminar ${completados.length} pendiente${completados.length!==1?'s':''} completado${completados.length!==1?'s':''}?`)) return;
+  try {
+    await Promise.all(completados.map(t=>dbEliminar(t.id)));
+    const ids = new Set(completados.map(t=>t.id));
+    S.tasks = S.tasks.filter(t=>!ids.has(t.id));
+    render();
+  } catch(e) { alert("Error al eliminar: " + e.message); }
+}
+
 async function enviarASemana(id) {
   const obj = { estado:"semana", dia:null, meta_id:null };
   S.tasks = S.tasks.map(x=>x.id===id?{...x,...obj}:x);
@@ -616,10 +659,10 @@ async function moverTask(id, zona, extra) {
   if (!t) return;
   const metaIdAnterior = t.meta_id || null;
   let obj;
-  if (zona === "bandeja") obj = { estado:"semana", meta_id:null };
+  if (zona === "bandeja") obj = { estado:"semana", meta_id:null, dia: extra==="sin" ? null : extra };
   else if (zona === "meta") obj = { estado:"semana", meta_id:Number(extra) };
   else return;
-  if (t.estado===obj.estado && (t.meta_id||null)===(obj.meta_id||null)) return;
+  if (t.estado===obj.estado && (t.meta_id||null)===(obj.meta_id||null) && (zona!=="bandeja" || (t.dia||null)===(obj.dia||null))) return;
   S.tasks = S.tasks.map(x=>x.id===id?{...x,...obj}:x);
   render();
   try { await dbActualizar(id, obj); } catch(e) { alert("Error al mover: " + e.message); }
@@ -627,10 +670,14 @@ async function moverTask(id, zona, extra) {
   if (obj.meta_id) recalcMeta(obj.meta_id);
 }
 
-// ── Reordenar dentro de una misma zona (bandeja, día o meta) ────────────
+// ── Reordenar dentro de una misma zona (bandeja, categoría o meta) ──────
 function idsEnZona(zona, extra) {
-  if (zona === "bandeja") return S.tasks.filter(t=>t.estado==='semana' && !t.meta_id && !t.completado).map(t=>t.id);
+  if (zona === "bandeja") {
+    const diaFiltro = extra==="sin" ? null : extra;
+    return ordenarPorCategoria(S.tasks.filter(t=>t.estado==='semana' && !t.meta_id && !t.completado && (t.dia||null)===diaFiltro)).map(t=>t.id);
+  }
   if (zona === "meta") return S.tasks.filter(t=>t.meta_id===Number(extra) && !t.completado).map(t=>t.id);
+  if (zona === "categoria") return S.tasks.filter(t=>t.estado==='maestra' && t.categoria===extra && !t.completado).map(t=>t.id);
   return [];
 }
 
@@ -654,7 +701,7 @@ async function reordenarZona(zona, extra, draggedId, overRowId, overBefore) {
 }
 
 async function manejarSoltar(id, zona, extra, overRowId, overBefore) {
-  await moverTask(id, zona, extra);
+  if (zona !== "categoria") await moverTask(id, zona, extra);
   await reordenarZona(zona, extra, id, overRowId, overBefore);
 }
 
@@ -914,7 +961,8 @@ function soltarDrag(e) {
   if (zoneEl) {
     const zona = zoneEl.dataset.zone;
     if (zona === "meta") manejarSoltar(id, "meta", zoneEl.dataset.meta, overRowId, overBefore);
-    else if (zona === "bandeja") manejarSoltar(id, "bandeja", null, overRowId, overBefore);
+    else if (zona === "bandeja") manejarSoltar(id, "bandeja", zoneEl.dataset.dia, overRowId, overBefore);
+    else if (zona === "categoria") manejarSoltar(id, "categoria", zoneEl.dataset.cat, overRowId, overBefore);
     else if (zona === "nueva-meta") convertirEnMeta(id);
   }
 }
