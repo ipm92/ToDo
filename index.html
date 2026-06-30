@@ -42,7 +42,7 @@ const API_METAS = SUPABASE_URL + "/rest/v1/metas";
 // Sube este número cada vez que subas un cambio nuevo del archivo a GitHub.
 // Así, cualquiera que tenga la app abierta con una versión vieja en caché
 // se actualiza solo, sin tener que limpiar caché ni escribir ?v= a mano.
-const APP_VERSION = "3";
+const APP_VERSION = "15";
 
 function xhr(method, url, body) {
   return new Promise((resolve, reject) => {
@@ -119,17 +119,23 @@ const CATEGORIAS = [
   { id:"matrimonio", label:"Matrimonio",color:"#8E24AA" },
   { id:"yo",         label:"Yo",        color:"#1E88E5" },
 ];
-const DIAS = [
-  { id:"lunes",     label:"Lunes" },
-  { id:"martes",    label:"Martes" },
-  { id:"miercoles", label:"Miércoles" },
-  { id:"jueves",    label:"Jueves" },
-  { id:"viernes",   label:"Viernes" },
-];
 const COLOR_PALETTE = ["#EF6C04","#0A8043","#7BB443","#BFC932","#8E24AA","#1E88E5","#D94F3D","#00897B","#5E35B1","#C2185B"];
-
-function getCategoria(id) { return CATEGORIAS.find(c=>c.id===id) || CATEGORIAS[0]; }
+const DIAS = [
+  { id:"lunes",     label:"Lunes",     color:"#C2291C" },
+  { id:"martes",    label:"Martes",    color:"#D88176" },
+  { id:"miercoles", label:"Miércoles", color:"#EDC04C" },
+  { id:"jueves",    label:"Jueves",    color:"#5EB47E" },
+  { id:"viernes",   label:"Viernes",   color:"#429487" },
+  { id:"sabado",    label:"Sábado",    color:"#4350AE" },
+  { id:"domingo",   label:"Domingo",   color:"#B09ED7" },
+];
 function diaLabel(id) { const d = DIAS.find(x=>x.id===id); return d ? d.label : ""; }
+function getDia(id) { return DIAS.find(d=>d.id===id) || null; }
+
+function getCategoria(id) {
+  if (id === "sin_clasificar") return { id:"sin_clasificar", label:"Sin clasificar", color:"#B0ADA6" };
+  return CATEGORIAS.find(c=>c.id===id) || CATEGORIAS[0];
+}
 function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 function formVacio() { return { texto:"", categoria:"release" }; }
 
@@ -141,18 +147,17 @@ const S = {
   enfoques: [],
   metaFormCat: null,
   enfoqueFormAbierto: false,
-  enfoqueColorSel: COLOR_PALETTE[0],
   editandoEnfoqueId: null,
   maestraAbiertas: {},
   mostrarForm: false,
   formDestino: "maestra",
   form: formVacio(),
   eliminarId: null,
+  clasificarId: null,
+  diaPickerId: null,
   editandoId: null,
   editandoMetaId: null,
   confirmSemana: false,
-  opcionPasarMaestra: true,
-  opcionBorrarMetas: false,
 };
 
 const LBL = `font-size:11px;font-weight:500;color:#999;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px;display:block;`;
@@ -204,25 +209,39 @@ function filaSemana(t, i, total, isDone, bg, override) {
   const cat = getCategoria(t.categoria);
   const color = override ? override.color : cat.color;
   const label = override ? override.label : cat.label;
+  const hideTag = override && override.hideTag;
+  const sinClasificar = !hideTag && cat.id === "sin_clasificar";
   const isFirst = i===0, isLast = i===total-1;
   const rad = isFirst&&isLast ? "12px" : isFirst ? "12px 12px 4px 4px" : isLast ? "4px 4px 12px 12px" : "4px";
   return `
   <div class="task-row" data-id="${t.id}" style="background:${bg};border-radius:${rad};padding:13px 14px;display:flex;align-items:center;gap:11px;opacity:${isDone?0.55:1};">
     <button onclick="toggleCompletado(${t.id})" style="width:22px;height:22px;border-radius:50%;border:1.5px solid ${isDone?color:'#E0DDD7'};background:${isDone?color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;">${isDone?'✓':''}</button>
     <div style="width:3px;min-height:30px;border-radius:2px;flex-shrink:0;background:${color};"></div>
-    <div style="flex:1;min-width:0;" onclick="editarTexto(${t.id})">
-      <p style="font-size:14.5px;font-weight:600;color:${isDone?'#aaa':'#1a1a1a'};${isDone?'text-decoration:line-through;':''}overflow:hidden;text-overflow:ellipsis;cursor:pointer;">${esc(t.texto)}</p>
+    <div style="flex:1;min-width:0;">
+      <p onclick="editarTexto(${t.id})" style="font-size:14.5px;font-weight:600;color:${isDone?'#aaa':'#1a1a1a'};${isDone?'text-decoration:line-through;':''}overflow:hidden;text-overflow:ellipsis;cursor:pointer;">${esc(t.texto)}</p>
+      ${!hideTag ? `
       <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
-        <span style="font-size:11px;font-weight:500;color:${color};background:${color}14;padding:2px 8px;border-radius:20px;">${esc(label)}</span>
-        ${t.dia?`<span style="font-size:11px;color:#bbb;">${diaLabel(t.dia)}</span>`:''}
-      </div>
+        <span onclick="${sinClasificar ? `toggleClasificar(${t.id})` : ''}" style="font-size:11px;font-weight:500;color:${color};background:${color}14;padding:2px 8px;border-radius:20px;${sinClasificar?'cursor:pointer;':''}">${esc(label)}${sinClasificar?' ›':''}</span>
+        <span onclick="toggleDiaPicker(${t.id})" style="font-size:11px;font-weight:500;color:${t.dia?getDia(t.dia).color:'#bbb'};background:${t.dia?getDia(t.dia).color+'14':'transparent'};border:1px solid ${t.dia?'transparent':'#E8E6E1'};padding:2px 8px;border-radius:20px;cursor:pointer;">${t.dia?diaLabel(t.dia):'Día ›'}</span>
+      </div>` : ''}
+      ${S.clasificarId===t.id ? `
+      <div class="fade" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+        ${CATEGORIAS.map(c=>`
+          <button onclick="asignarCategoria(${t.id},'${c.id}')" style="font-size:11px;font-weight:500;color:${c.color};background:${c.color}14;border:1px solid ${c.color}55;border-radius:20px;padding:4px 10px;">${c.label}</button>`).join('')}
+      </div>` : ''}
+      ${S.diaPickerId===t.id ? `
+      <div class="fade" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+        ${DIAS.map(d=>`
+          <button onclick="asignarDia(${t.id},'${d.id}')" style="font-size:11px;font-weight:500;color:${t.dia===d.id?'#fff':d.color};background:${t.dia===d.id?d.color:d.color+'14'};border:1px solid ${d.color}55;border-radius:20px;padding:4px 10px;">${d.label}</button>`).join('')}
+        ${t.dia?`<button onclick="asignarDia(${t.id},null)" style="font-size:11px;font-weight:500;color:#bbb;background:#F0EDE8;border-radius:20px;padding:4px 10px;">Quitar</button>`:''}
+      </div>` : ''}
     </div>
     ${S.eliminarId===t.id ? `
       <div style="display:flex;gap:5px;flex-shrink:0;">
         <button onclick="accionEliminar(${t.id})" style="font-size:11px;font-weight:600;color:#D94F3D;background:#D94F3D14;border-radius:6px;padding:4px 9px;">Eliminar</button>
         <button onclick="S.eliminarId=null;render()" style="font-size:11px;color:#999;background:#F0EDE8;border-radius:6px;padding:4px 9px;">Cancelar</button>
       </div>` : `
-      <button onclick="volverAMaestra(${t.id})" title="Volver al Inbox" style="font-size:15px;color:#ccc;flex-shrink:0;line-height:1;">←</button>
+      <button onclick="volverAMaestra(${t.id})" title="Volver a Por asignar" style="font-size:15px;color:#ccc;flex-shrink:0;line-height:1;">←</button>
       <button onclick="S.eliminarId=${t.id};render()" style="font-size:16px;color:#ddd;flex-shrink:0;line-height:1;">×</button>
       ${!isDone ? `<div class="drag-handle" onpointerdown="iniciarDrag(event,${t.id})" style="touch-action:none;cursor:grab;color:#ccc;font-size:17px;padding:4px 2px;flex-shrink:0;line-height:1;">≡</div>` : ''}
     `}
@@ -266,20 +285,21 @@ function renderMaestra() {
   </div>`;
 }
 
-function renderTodosSemana() {
-  const items = S.tasks.filter(t=>t.estado==='semana' && !t.dia && !t.meta_id);
+function renderPorAsignar() {
+  const items = S.tasks.filter(t=>t.estado==='semana' && !t.meta_id);
   const activos = items.filter(t=>!t.completado);
   const hechos  = items.filter(t=>t.completado);
-  const formAbierto = S.mostrarForm && S.formDestino === "semana";
   return `
   <div style="margin-top:30px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <p style="${LBL}margin-bottom:0;">To dos de la semana · ${activos.length}</p>
-      <button onclick="toggleForm('semana')" style="width:28px;height:28px;border-radius:50%;background:${formAbierto?'#f0ede8':'#1a1a1a'};color:${formAbierto?'#999':'#fff'};font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${formAbierto?'×':'+'}</button>
+    <p style="${LBL}">Por asignar</p>
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <input id="quick-add-semana" type="text" placeholder="Captura rápida, clasifica después..."
+        style="flex:1;background:#fff;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 14px;font-size:14px;color:#1a1a1a;"
+        onkeydown="if(event.key==='Enter') quickAddSemana()" />
+      <button onclick="quickAddSemana()" style="font-size:14px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:10px;padding:10px 16px;flex-shrink:0;">+</button>
     </div>
-    ${formAbierto ? renderForm() : ''}
-    <div data-zone="bandeja" style="display:flex;flex-direction:column;gap:1px;min-height:50px;margin-top:${formAbierto?'10px':'0'};">
-      ${activos.length===0 ? emptyZoneHTML('Usa "→ Semana" desde el Inbox para traer pendientes aquí') : activos.map((t,i)=>filaSemana(t,i,activos.length,false)).join('')}
+    <div data-zone="bandeja" style="display:flex;flex-direction:column;gap:1px;min-height:50px;">
+      ${activos.length===0 ? emptyZoneHTML('Usa "→ Semana" desde Por asignar, o captura aquí mismo') : activos.map((t,i)=>filaSemana(t,i,activos.length,false)).join('')}
     </div>
     ${hechos.length>0 ? `
     <div style="margin-top:8px;display:flex;flex-direction:column;gap:1px;">
@@ -288,22 +308,24 @@ function renderTodosSemana() {
   </div>`;
 }
 
-function renderMetaForm(enfoque) {
+function renderMetaForm() {
   return `
   <div class="fade" style="background:#fff;border:1px solid #E8E6E1;border-radius:12px;padding:12px;margin-bottom:8px;display:flex;gap:8px;">
-    <input id="inp-meta-${enfoque.id}" type="text" placeholder="Nueva meta de ${esc(enfoque.texto)}"
+    <input id="inp-nueva-meta" type="text" placeholder="Nueva meta..."
       style="flex:1;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:9px 12px;font-size:13.5px;color:#1a1a1a;"
-      onkeydown="if(event.key==='Enter') guardarMeta(${enfoque.id})" />
-    <button onclick="guardarMeta(${enfoque.id})" style="font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:8px;padding:9px 14px;flex-shrink:0;">Listo</button>
+      onkeydown="if(event.key==='Enter') guardarMeta()" />
+    <button onclick="guardarMeta()" style="font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:8px;padding:9px 14px;flex-shrink:0;">Listo</button>
   </div>`;
 }
 
-function renderMeta(m, enfoque) {
+const META_COLOR = "#1a1a1a";
+
+function renderMeta(m) {
   const todos = S.tasks.filter(t=>t.meta_id===m.id);
   const total = todos.length;
   const hechos = todos.filter(t=>t.completado).length;
   const completa = !!m.completado;
-  const override = { color: enfoque.color, label: enfoque.texto };
+  const override = { color: META_COLOR, label: "Acción", hideTag: true };
   if (S.editandoMetaId === m.id) {
     return `
     <div style="background:#fff;border:1.5px solid #1a1a1a;border-radius:14px;padding:14px 16px;margin-bottom:8px;display:flex;gap:8px;align-items:center;">
@@ -317,7 +339,7 @@ function renderMeta(m, enfoque) {
   return `
   <div data-zone="meta" data-meta="${m.id}" style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;border:1px solid #E8E6E1;">
     <div style="display:flex;align-items:flex-start;gap:10px;">
-      <button onclick="toggleMetaCompletado(${m.id})" style="width:20px;height:20px;border-radius:6px;border:1.5px solid ${completa?enfoque.color:'#E0DDD7'};background:${completa?enfoque.color:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;margin-top:1px;">${completa?'✓':''}</button>
+      <button onclick="toggleMetaCompletado(${m.id})" style="width:20px;height:20px;border-radius:6px;border:1.5px solid ${completa?META_COLOR:'#E0DDD7'};background:${completa?META_COLOR:'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;margin-top:1px;">${completa?'✓':''}</button>
       <div style="flex:1;min-width:0;" onclick="editarMeta(${m.id})">
         <p style="font-size:14.5px;font-weight:600;color:${completa?'#aaa':'#1a1a1a'};${completa?'text-decoration:line-through;':''}cursor:pointer;">${esc(m.texto)}</p>
         ${total>0?`<p style="font-size:11px;color:#bbb;margin-top:2px;">${hechos}/${total} listo${total===1?'':'s'}</p>`:''}
@@ -327,7 +349,7 @@ function renderMeta(m, enfoque) {
     <div style="margin-top:10px;display:flex;flex-direction:column;gap:1px;padding-left:30px;">
       ${total===0 ? `<p style="font-size:12px;color:#ccc;padding:4px 0 8px;">Arrastra to dos aquí, o agrega uno nuevo</p>` : todos.map((t,i)=>filaSemana(t,i,total,t.completado,'#F7F6F3',override)).join('')}
       <div style="display:flex;gap:6px;margin-top:8px;">
-        <input id="inp-todo-${m.id}" type="text" placeholder="Agregar to do..."
+        <input id="inp-todo-${m.id}" type="text" placeholder="Agregar acción..."
           style="flex:1;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:7px 10px;font-size:13px;color:#1a1a1a;"
           onkeydown="if(event.key==='Enter') guardarMetaTodo(${m.id})" />
         <button onclick="guardarMetaTodo(${m.id})" style="font-size:13px;font-weight:600;color:#777;background:#F0EDE8;border-radius:8px;padding:7px 12px;flex-shrink:0;">+</button>
@@ -336,11 +358,25 @@ function renderMeta(m, enfoque) {
   </div>`;
 }
 
+function renderMetasGlobal() {
+  return `
+  <div style="margin-top:30px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <p style="${LBL}margin-bottom:0;">Metas / Acciones concretas</p>
+      <button onclick="toggleMetaForm()" style="font-size:12px;font-weight:600;color:#777;background:#fff;border:1.5px solid #E8E6E1;border-radius:20px;padding:5px 12px;">+ Meta</button>
+    </div>
+    ${S.metaFormCat ? renderMetaForm() : ''}
+    <div data-zone="nueva-meta" style="border:1.5px dashed #E8E6E1;border-radius:12px;padding:9px;margin-bottom:8px;text-align:center;">
+      <p style="font-size:11px;color:#ccc;">Suelta aquí un to do para convertirlo en meta</p>
+    </div>
+    ${S.metas.length===0 ? `<p style="font-size:12px;color:#ccc;padding:2px 0 0;">Sin metas todavía</p>` : S.metas.map(m=>renderMeta(m)).join('')}
+  </div>`;
+}
+
 function renderEnfoqueBlock(enfoque) {
-  const metas = S.metas.filter(m=>m.enfoque_id===enfoque.id);
   if (S.editandoEnfoqueId === enfoque.id) {
     return `
-    <div style="background:#fff;border:1.5px solid #1a1a1a;border-radius:14px;padding:14px 16px;margin-bottom:22px;display:flex;gap:8px;align-items:center;">
+    <div style="background:#fff;border:1.5px solid #1a1a1a;border-radius:14px;padding:14px 16px;margin-bottom:8px;display:flex;gap:8px;align-items:center;">
       <input id="edit-enfoque-${enfoque.id}" type="text" value="${esc(enfoque.texto)}"
         style="flex:1;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:9px 12px;font-size:14px;color:#1a1a1a;"
         onkeydown="if(event.key==='Enter') guardarEdicionEnfoque(${enfoque.id}); if(event.key==='Escape') cancelarEdicionEnfoque();" />
@@ -349,17 +385,9 @@ function renderEnfoqueBlock(enfoque) {
     </div>`;
   }
   return `
-  <div style="margin-bottom:22px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;">
-      <span onclick="editarEnfoque(${enfoque.id})" style="font-size:13px;font-weight:700;color:${enfoque.color};letter-spacing:.3px;text-transform:uppercase;cursor:pointer;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;">${esc(enfoque.texto)}</span>
-      <button onclick="toggleMetaForm(${enfoque.id})" style="font-size:12px;font-weight:600;color:#777;background:#fff;border:1.5px solid #E8E6E1;border-radius:20px;padding:5px 12px;flex-shrink:0;">+ Meta</button>
-      <button onclick="eliminarEnfoque(${enfoque.id})" style="font-size:15px;color:#ddd;flex-shrink:0;line-height:1;">×</button>
-    </div>
-    ${S.metaFormCat===enfoque.id ? renderMetaForm(enfoque) : ''}
-    <div data-zone="nueva-meta" data-enfoque="${enfoque.id}" style="border:1.5px dashed #E8E6E1;border-radius:12px;padding:9px;margin-bottom:8px;text-align:center;">
-      <p style="font-size:11px;color:#ccc;">Suelta aquí un to do para convertirlo en meta</p>
-    </div>
-    ${metas.length===0 ? `<p style="font-size:12px;color:#ccc;padding:2px 0 0;">Sin metas todavía</p>` : metas.map(m=>renderMeta(m,enfoque)).join('')}
+  <div style="background:#fff;border:1px solid #E8E6E1;border-radius:12px;padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+    <span onclick="editarEnfoque(${enfoque.id})" style="font-size:13.5px;font-weight:700;color:${enfoque.color};letter-spacing:.3px;text-transform:uppercase;cursor:pointer;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;">${esc(enfoque.texto)}</span>
+    <button onclick="eliminarEnfoque(${enfoque.id})" style="font-size:15px;color:#ddd;flex-shrink:0;line-height:1;">×</button>
   </div>`;
 }
 
@@ -367,12 +395,8 @@ function renderEnfoqueForm() {
   return `
   <div class="fade" style="background:#fff;border:1px solid #E8E6E1;border-radius:12px;padding:14px;margin-bottom:16px;">
     <input id="inp-nuevo-enfoque" type="text" placeholder="Ej. Salud, Casa, Familia..."
-      style="width:100%;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:9px 12px;font-size:13.5px;color:#1a1a1a;margin-bottom:10px;"
+      style="width:100%;background:#F7F6F3;border:1.5px solid #E8E6E1;border-radius:8px;padding:9px 12px;font-size:13.5px;color:#1a1a1a;margin-bottom:12px;"
       onkeydown="if(event.key==='Enter') guardarEnfoque()" />
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-      ${COLOR_PALETTE.map(c=>`
-        <button onclick="S.enfoqueColorSel='${c}';render()" style="width:26px;height:26px;border-radius:50%;background:${c};border:2px solid ${S.enfoqueColorSel===c?'#1a1a1a':'transparent'};flex-shrink:0;"></button>`).join('')}
-    </div>
     <div style="display:flex;gap:8px;">
       <button onclick="S.enfoqueFormAbierto=false;render()" style="flex:1;font-size:13px;font-weight:500;color:#888;background:#F0EDE8;border-radius:8px;padding:9px;">Cancelar</button>
       <button onclick="guardarEnfoque()" style="flex:1;font-size:13px;font-weight:600;color:#fff;background:#1a1a1a;border-radius:8px;padding:9px;">Crear enfoque</button>
@@ -388,30 +412,7 @@ function renderEnfoques() {
       <button onclick="S.enfoqueFormAbierto=!S.enfoqueFormAbierto;render()" style="font-size:12px;font-weight:600;color:#777;background:#fff;border:1.5px solid #E8E6E1;border-radius:20px;padding:5px 12px;">+ Enfoque</button>
     </div>
     ${S.enfoqueFormAbierto ? renderEnfoqueForm() : ''}
-    ${S.enfoques.length===0 ? `<p style="font-size:12px;color:#ccc;">Crea tu primer enfoque para empezar a ponerle metas</p>` : S.enfoques.map(e=>renderEnfoqueBlock(e)).join('')}
-  </div>`;
-}
-
-function renderDia(d) {
-  const tareas  = S.tasks.filter(t=>t.estado==='semana' && t.dia===d.id);
-  const activos = tareas.filter(t=>!t.completado);
-  const hechos  = tareas.filter(t=>t.completado);
-  return `
-  <div style="margin-bottom:16px;">
-    <p style="font-size:12px;font-weight:600;color:#999;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;">${d.label}</p>
-    <div data-zone="dia" data-dia="${d.id}" style="display:flex;flex-direction:column;gap:1px;min-height:46px;">
-      ${activos.length===0 && hechos.length===0 ? emptyZoneHTML('Sin pendientes') : ''}
-      ${activos.map((t,i)=>filaSemana(t,i,activos.length,false)).join('')}
-      ${hechos.map((t,i)=>filaSemana(t,i,hechos.length,true)).join('')}
-    </div>
-  </div>`;
-}
-
-function renderRecordatorios() {
-  return `
-  <div style="margin-top:30px;">
-    <p style="${LBL}">Recordatorios</p>
-    ${DIAS.map(d=>renderDia(d)).join('')}
+    ${S.enfoques.length===0 ? `<p style="font-size:12px;color:#ccc;">Crea tu primer enfoque para la semana</p>` : S.enfoques.map(e=>renderEnfoqueBlock(e)).join('')}
   </div>`;
 }
 
@@ -426,8 +427,8 @@ function renderSemanaTab() {
   return `
     ${renderBotonPlanear()}
     ${renderEnfoques()}
-    ${renderTodosSemana()}
-    ${renderRecordatorios()}
+    ${renderMetasGlobal()}
+    ${renderPorAsignar()}
   `;
 }
 
@@ -455,26 +456,18 @@ function renderConfirmSemana() {
   const semana = S.tasks.filter(t=>t.estado==='semana');
   const completados = semana.filter(t=>t.completado).length;
   const pendientes  = semana.filter(t=>!t.completado).length;
+  const totalMetas = S.metas.length;
   return `
   <div onclick="if(event.target===this){S.confirmSemana=false;render();}" style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:24px;z-index:10000;">
     <div style="background:#fff;border-radius:16px;padding:24px;max-width:360px;width:100%;">
       <p style="font-family:'Playfair Display',serif;font-size:19px;font-weight:700;color:#1a1a1a;margin-bottom:8px;">Planear nueva semana</p>
-      <p style="font-size:13px;color:#999;line-height:1.5;margin-bottom:16px;">Los ${completados} pendiente${completados!==1?'s':''} completado${completados!==1?'s':''} de la semana se eliminan siempre. Elige qué más hacer con los ${pendientes} pendiente${pendientes!==1?'s':''} sin terminar:</p>
+      <p style="font-size:13px;color:#999;line-height:1.5;margin-bottom:18px;">Esto borra los ${completados} pendiente${completados!==1?'s':''} completado${completados!==1?'s':''} y las ${totalMetas} meta${totalMetas!==1?'s':''} con sus acciones. Elige qué hacer con los ${pendientes} pendiente${pendientes!==1?'s':''} sin terminar:</p>
 
-      <div onclick="S.opcionPasarMaestra=!S.opcionPasarMaestra;render()" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px;border-radius:10px;margin-bottom:8px;background:${S.opcionPasarMaestra?'#1a1a1a0A':'#F7F6F3'};">
-        <div style="width:18px;height:18px;border-radius:5px;border:1.5px solid ${S.opcionPasarMaestra?'#1a1a1a':'#E0DDD7'};background:${S.opcionPasarMaestra?'#1a1a1a':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;margin-top:1px;">${S.opcionPasarMaestra?'✓':''}</div>
-        <p style="font-size:13.5px;color:#444;line-height:1.4;">Pasar los pendientes sin terminar de la semana al Inbox</p>
-      </div>
+      <button onclick="ejecutarPlanearSemana('maestra')" style="width:100%;text-align:left;padding:14px;border-radius:12px;font-size:13.5px;font-weight:600;color:#1a1a1a;background:#F7F6F3;border:1.5px solid #E8E6E1;margin-bottom:10px;line-height:1.4;">Borrar todo y pasar pendientes sin terminar a la pestaña "Por asignar"</button>
 
-      <div onclick="S.opcionBorrarMetas=!S.opcionBorrarMetas;render()" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px;border-radius:10px;margin-bottom:18px;background:${S.opcionBorrarMetas?'#D94F3D0A':'#F7F6F3'};">
-        <div style="width:18px;height:18px;border-radius:5px;border:1.5px solid ${S.opcionBorrarMetas?'#D94F3D':'#E0DDD7'};background:${S.opcionBorrarMetas?'#D94F3D':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;margin-top:1px;">${S.opcionBorrarMetas?'✓':''}</div>
-        <p style="font-size:13.5px;color:#444;line-height:1.4;">Borrar todas las metas y sus to dos</p>
-      </div>
+      <button onclick="ejecutarPlanearSemana('semana')" style="width:100%;text-align:left;padding:14px;border-radius:12px;font-size:13.5px;font-weight:600;color:#1a1a1a;background:#F7F6F3;border:1.5px solid #E8E6E1;margin-bottom:18px;line-height:1.4;">Borrar todo y dejar pendientes sin terminar en la pestaña "Esta semana"</button>
 
-      <div style="display:flex;gap:8px;">
-        <button onclick="S.confirmSemana=false;render()" style="flex:1;padding:12px;border-radius:12px;font-size:14px;font-weight:500;background:#F0EDE8;color:#888;">Cancelar</button>
-        <button onclick="ejecutarPlanearSemana()" style="flex:1;padding:12px;border-radius:12px;font-size:14px;font-weight:600;background:#1a1a1a;color:#fff;">Confirmar</button>
-      </div>
+      <button onclick="S.confirmSemana=false;render()" style="width:100%;padding:12px;border-radius:12px;font-size:14px;font-weight:500;background:#F0EDE8;color:#888;">Cancelar</button>
     </div>
   </div>`;
 }
@@ -493,7 +486,7 @@ function render() {
         </div>
         <div style="display:flex;gap:6px;margin-top:14px;">
           <button onclick="S.tab='semana';render()" style="padding:7px 18px;border-radius:20px;font-size:13px;font-weight:500;background:${S.tab==='semana'?'#1a1a1a':'transparent'};color:${S.tab==='semana'?'#fff':'#999'};border:1.5px solid ${S.tab==='semana'?'#1a1a1a':'#E8E6E1'};">Esta semana</button>
-          <button onclick="S.tab='maestra';render()" style="padding:7px 18px;border-radius:20px;font-size:13px;font-weight:500;background:${S.tab==='maestra'?'#1a1a1a':'transparent'};color:${S.tab==='maestra'?'#fff':'#999'};border:1.5px solid ${S.tab==='maestra'?'#1a1a1a':'#E8E6E1'};">Inbox</button>
+          <button onclick="S.tab='maestra';render()" style="padding:7px 18px;border-radius:20px;font-size:13px;font-weight:500;background:${S.tab==='maestra'?'#1a1a1a':'transparent'};color:${S.tab==='maestra'?'#fff':'#999'};border:1.5px solid ${S.tab==='maestra'?'#1a1a1a':'#E8E6E1'};">Por asignar</button>
         </div>
       </div>
     </div>
@@ -544,6 +537,19 @@ async function accionGuardar() {
     alert("Error al guardar: " + e.message);
     if (btn) { btn.innerText = "Agregar"; btn.style.opacity = "1"; btn.disabled = false; }
   }
+}
+
+async function quickAddSemana() {
+  const inp = document.getElementById("quick-add-semana");
+  const texto = inp ? inp.value.trim() : "";
+  if (!texto) return;
+  const obj = { texto, categoria:"sin_clasificar", estado:"semana", dia:null, meta_id:null, completado:false };
+  try {
+    const guardado = await dbGuardar(obj);
+    if (guardado) S.tasks.push(guardado);
+    render();
+    setTimeout(() => { const i = document.getElementById("quick-add-semana"); if(i) i.focus(); }, 100);
+  } catch(e) { alert("Error al guardar: " + e.message); }
 }
 
 async function recalcMeta(metaId) {
@@ -610,11 +616,10 @@ async function moverTask(id, zona, extra) {
   if (!t) return;
   const metaIdAnterior = t.meta_id || null;
   let obj;
-  if (zona === "bandeja") obj = { estado:"semana", dia:null, meta_id:null };
-  else if (zona === "dia") obj = { estado:"semana", dia:extra, meta_id:null };
-  else if (zona === "meta") obj = { estado:"semana", dia:null, meta_id:Number(extra) };
+  if (zona === "bandeja") obj = { estado:"semana", meta_id:null };
+  else if (zona === "meta") obj = { estado:"semana", meta_id:Number(extra) };
   else return;
-  if (t.estado===obj.estado && (t.dia||null)===(obj.dia||null) && (t.meta_id||null)===(obj.meta_id||null)) return;
+  if (t.estado===obj.estado && (t.meta_id||null)===(obj.meta_id||null)) return;
   S.tasks = S.tasks.map(x=>x.id===id?{...x,...obj}:x);
   render();
   try { await dbActualizar(id, obj); } catch(e) { alert("Error al mover: " + e.message); }
@@ -624,8 +629,7 @@ async function moverTask(id, zona, extra) {
 
 // ── Reordenar dentro de una misma zona (bandeja, día o meta) ────────────
 function idsEnZona(zona, extra) {
-  if (zona === "bandeja") return S.tasks.filter(t=>t.estado==='semana' && !t.dia && !t.meta_id && !t.completado).map(t=>t.id);
-  if (zona === "dia") return S.tasks.filter(t=>t.estado==='semana' && t.dia===extra && !t.completado).map(t=>t.id);
+  if (zona === "bandeja") return S.tasks.filter(t=>t.estado==='semana' && !t.meta_id && !t.completado).map(t=>t.id);
   if (zona === "meta") return S.tasks.filter(t=>t.meta_id===Number(extra) && !t.completado).map(t=>t.id);
   return [];
 }
@@ -654,12 +658,10 @@ async function manejarSoltar(id, zona, extra, overRowId, overBefore) {
   await reordenarZona(zona, extra, id, overRowId, overBefore);
 }
 
-async function ejecutarPlanearSemana() {
+async function ejecutarPlanearSemana(destino) {
   const semana = S.tasks.filter(t=>t.estado==='semana');
   const aEliminar = semana.filter(t=>t.completado);
   const incompletos = semana.filter(t=>!t.completado);
-  const pasarAMaestra = S.opcionPasarMaestra;
-  const borrarMetas = S.opcionBorrarMetas;
   S.confirmSemana = false;
   render();
   try {
@@ -667,23 +669,20 @@ async function ejecutarPlanearSemana() {
     const eliminarIds = new Set(aEliminar.map(t=>t.id));
     let tasksNuevas = S.tasks.filter(t=>!eliminarIds.has(t.id));
 
-    if (pasarAMaestra) {
-      await Promise.all(incompletos.map(t=>dbActualizar(t.id, {estado:"maestra", dia:null, meta_id:null})));
-      const regresarIds = new Set(incompletos.map(t=>t.id));
-      tasksNuevas = tasksNuevas.map(t=> regresarIds.has(t.id) ? {...t, estado:"maestra", dia:null, meta_id:null} : t);
-    }
+    // Borrar siempre todas las metas y sus acciones quedan sin meta_id (on delete set null)
+    await Promise.all(S.metas.map(m=>dbEliminarMeta(m.id)));
 
-    let metasNuevas = S.metas;
-    if (borrarMetas) {
-      await Promise.all(S.metas.map(m=>dbEliminarMeta(m.id)));
-      metasNuevas = [];
-      if (!pasarAMaestra) {
-        tasksNuevas = tasksNuevas.map(t=> t.meta_id ? {...t, meta_id:null} : t);
-      }
+    const incompletosIds = new Set(incompletos.map(t=>t.id));
+    if (destino === "maestra") {
+      await Promise.all(incompletos.map(t=>dbActualizar(t.id, {estado:"maestra", dia:null, meta_id:null})));
+      tasksNuevas = tasksNuevas.map(t=> incompletosIds.has(t.id) ? {...t, estado:"maestra", dia:null, meta_id:null} : (t.meta_id ? {...t, meta_id:null} : t));
+    } else {
+      await Promise.all(incompletos.map(t=>dbActualizar(t.id, {dia:null, meta_id:null})));
+      tasksNuevas = tasksNuevas.map(t=> incompletosIds.has(t.id) ? {...t, dia:null, meta_id:null} : (t.meta_id ? {...t, meta_id:null} : t));
     }
 
     S.tasks = tasksNuevas;
-    S.metas = metasNuevas;
+    S.metas = [];
     render();
   } catch(e) {
     alert("Error: " + e.message);
@@ -691,20 +690,20 @@ async function ejecutarPlanearSemana() {
   }
 }
 
-function toggleMetaForm(enfoqueId) {
-  S.metaFormCat = S.metaFormCat === enfoqueId ? null : enfoqueId;
+function toggleMetaForm() {
+  S.metaFormCat = !S.metaFormCat;
   render();
-  if (S.metaFormCat) setTimeout(() => { const i = document.getElementById("inp-meta-" + enfoqueId); if(i) i.focus(); }, 100);
+  if (S.metaFormCat) setTimeout(() => { const i = document.getElementById("inp-nueva-meta"); if(i) i.focus(); }, 100);
 }
 
-async function guardarMeta(enfoqueId) {
-  const inp = document.getElementById("inp-meta-" + enfoqueId);
+async function guardarMeta() {
+  const inp = document.getElementById("inp-nueva-meta");
   const texto = inp ? inp.value.trim() : "";
   if (!texto) return;
   try {
-    const guardado = await dbGuardarMeta({ enfoque_id: enfoqueId, texto, completado:false });
+    const guardado = await dbGuardarMeta({ texto, completado:false });
     if (guardado) S.metas.push(guardado);
-    S.metaFormCat = null;
+    S.metaFormCat = false;
     render();
   } catch(e) { alert("Error al guardar meta: " + e.message); }
 }
@@ -724,11 +723,11 @@ async function guardarEnfoque() {
   const inp = document.getElementById("inp-nuevo-enfoque");
   const texto = inp ? inp.value.trim() : "";
   if (!texto) return;
+  const color = "#8A8A8A";
   try {
-    const guardado = await dbGuardarEnfoque({ texto, color: S.enfoqueColorSel });
+    const guardado = await dbGuardarEnfoque({ texto, color });
     if (guardado) S.enfoques.push(guardado);
     S.enfoqueFormAbierto = false;
-    S.enfoqueColorSel = COLOR_PALETTE[0];
     render();
   } catch(e) { alert("Error al guardar enfoque: " + e.message); }
 }
@@ -753,23 +752,20 @@ async function guardarEdicionEnfoque(id) {
 }
 
 async function eliminarEnfoque(id) {
-  if (!confirm("¿Eliminar este enfoque? Se eliminarán también sus metas (sus to dos volverán a \"To dos de la semana\").")) return;
+  if (!confirm("¿Eliminar este enfoque?")) return;
   try {
     await dbEliminarEnfoque(id);
-    const metaIds = new Set(S.metas.filter(m=>m.enfoque_id===id).map(m=>m.id));
-    S.metas = S.metas.filter(m=>m.enfoque_id!==id);
     S.enfoques = S.enfoques.filter(e=>e.id!==id);
-    S.tasks = S.tasks.map(t=> metaIds.has(t.meta_id) ? {...t, meta_id:null} : t);
     render();
   } catch(e) { alert("Error: " + e.message); }
 }
 
-async function convertirEnMeta(id, enfoqueId) {
+async function convertirEnMeta(id) {
   const t = S.tasks.find(x=>x.id===id);
   if (!t) return;
   const metaIdAnterior = t.meta_id || null;
   try {
-    const nuevaMeta = await dbGuardarMeta({ enfoque_id: Number(enfoqueId), texto: t.texto, completado: false });
+    const nuevaMeta = await dbGuardarMeta({ texto: t.texto, completado: false });
     await dbEliminar(id);
     if (nuevaMeta) S.metas.push(nuevaMeta);
     S.tasks = S.tasks.filter(x=>x.id!==id);
@@ -789,6 +785,29 @@ async function guardarMetaTodo(metaId) {
     setTimeout(() => { const i = document.getElementById("inp-todo-" + metaId); if(i) i.focus(); }, 100);
     recalcMeta(metaId);
   } catch(e) { alert("Error al guardar to do: " + e.message); }
+}
+
+// ── Clasificar pendientes del braindump ("sin clasificar") ─────────────
+function toggleClasificar(id) {
+  S.clasificarId = S.clasificarId === id ? null : id;
+  render();
+}
+async function asignarCategoria(id, catId) {
+  S.tasks = S.tasks.map(x=>x.id===id?{...x, categoria:catId}:x);
+  S.clasificarId = null;
+  render();
+  try { await dbActualizar(id, {categoria:catId}); } catch(e) { alert("Error: " + e.message); }
+}
+
+function toggleDiaPicker(id) {
+  S.diaPickerId = S.diaPickerId === id ? null : id;
+  render();
+}
+async function asignarDia(id, diaId) {
+  S.tasks = S.tasks.map(x=>x.id===id?{...x, dia:diaId}:x);
+  S.diaPickerId = null;
+  render();
+  try { await dbActualizar(id, {dia:diaId}); } catch(e) { alert("Error: " + e.message); }
 }
 
 // ── Edición de texto: pendientes ─────────────────────────────────────────
@@ -894,10 +913,9 @@ function soltarDrag(e) {
   dragState = null;
   if (zoneEl) {
     const zona = zoneEl.dataset.zone;
-    if (zona === "dia") manejarSoltar(id, "dia", zoneEl.dataset.dia, overRowId, overBefore);
-    else if (zona === "meta") manejarSoltar(id, "meta", zoneEl.dataset.meta, overRowId, overBefore);
+    if (zona === "meta") manejarSoltar(id, "meta", zoneEl.dataset.meta, overRowId, overBefore);
     else if (zona === "bandeja") manejarSoltar(id, "bandeja", null, overRowId, overBefore);
-    else if (zona === "nueva-meta") convertirEnMeta(id, zoneEl.dataset.enfoque);
+    else if (zona === "nueva-meta") convertirEnMeta(id);
   }
 }
 
